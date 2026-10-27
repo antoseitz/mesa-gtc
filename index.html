@@ -46,6 +46,7 @@ h3{margin:0;font-size:15px}
 .up{color:var(--up)}.down{color:var(--down)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0;overflow-x:auto}
 .card,.grid>*{min-width:0}
+.drawer>*{flex-shrink:0}
 .panel>header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .grid{display:grid;gap:14px}
 .g2{grid-template-columns:repeat(auto-fill,minmax(420px,1fr))}
@@ -880,7 +881,9 @@ function porQueHoy(){const s=MS();const nq=s.get("^IXIC"),sp=s.get("^GSPC");if(!
   const nt=(M.noticias||[]).filter(x=>x.fecha&&(Date.now()-new Date(x.fecha.length<=16?x.fecha+":00Z":x.fecha))/36e5<20&&/(stock|nasdaq|s&p|dow|wall street|market|bolsa|acciones)/i.test(x.titulo)).slice(0,4);
   return{b,nt,abierta}}
 
-function intradiaSVG(){const I=M?.intradia;if(!I||!I.horas?.length)return'<p class="faint">Sin datos del día todavía.</p>';
+function intradiaSVG(){let I=M?.intradia;if(!I||!I.horas?.length)return'<p class="faint">Sin datos del día todavía.</p>';
+  const ref=I.s["^IXIC"]||[];let i0=ref.findIndex(v=>v!=null);if(i0<0)i0=0;let i1=ref.length-1;while(i1>i0+1&&ref[i1]===ref[i1-1])i1--;
+  I={...I,horas:I.horas.slice(i0,i1+1),s:Object.fromEntries(Object.entries(I.s).map(([k,v])=>[k,v.slice(i0,i1+1)]))};
   const sel=load("gtc-intra")||["^IXIC","^GSPC","^VIX"];const nom={"^IXIC":"Nasdaq","^GSPC":"S&P 500","^VIX":"VIX (miedo)","DX-Y.NYB":"Dólar DXY","^TNX":"Tasa 10 años"};
   const S=Object.keys(I.s).filter(t=>sel.includes(t)).map((t,k)=>{const v=I.s[t],b=I.prev?.[t]??v.find(x=>x!=null);const u=[...v].reverse().find(x=>x!=null);return{nombre:nom[t]||t,vals:v,base:b,color:{"^IXIC":"#38bdf8","^GSPC":"#22c55e","^VIX":"#ef4444","DX-Y.NYB":"#f59e0b","^TNX":"#a78bfa"}[t],dash:t==="^VIX",fin:b&&u?(u/b-1)*100:null}});
   const h=I.horas;const btn=Object.keys(I.s).map(t=>`<button data-intra="${t}" aria-selected="${sel.includes(t)}">${nom[t]||t}</button>`).join("");
@@ -898,7 +901,7 @@ function tendenciaHTML(){const T=M?.tendencia||{};const L=T[vistaTend]||[];
   const seg=`<div class="seg">${Object.keys(nomV).map(k=>`<button data-tend="${k}" aria-selected="${vistaTend===k}">${nomV[k]}${T[k]?` (${T[k].length})`:""}</button>`).join("")}</div>`;
   if(!L.length)return seg+'<p class="faint">Sin datos todavía (se actualiza cada 30 min en días hábiles).</p>';
   return seg+`<div class="tbox"><table><thead><tr><th>Acción</th><th class="n">Hoy</th><th class="n">Volumen</th><th>¿En el WLS?</th><th>Por qué se mueve (titular más reciente)</th></tr></thead><tbody>${L.slice(0,20).map(x=>{const n0=(x.noticias||[])[0],ev=EV.get(x.t);
-    return`<tr ${ev?`class="click" data-ver="${esc(x.t)}"`:""}><td class="tkc"><b>${esc(x.t)}</b><span>${esc(x.nombre||"")}</span></td><td class="n">${pct(x.r1d,1)}</td><td class="n">${x.volx!=null?fmt(x.volx,1)+"×":"–"}</td>
+    return`<tr class="click" data-tk="${esc(x.t)}"><td class="tkc"><b>${esc(x.t)}</b><span>${esc(x.nombre||"")}</span></td><td class="n">${pct(x.r1d,1)}</td><td class="n">${x.volx!=null?fmt(x.volx,1)+"×":"–"}</td>
     <td>${x.enWLS?`<span class="chip good">sí · se puede comprar</span>${ev?' <span class="chip info">analizada</span>':""}`:'<span class="chip">no está</span>'}</td>
     <td style="max-width:440px">${n0?`<a href="${esc(n0.url)}" target="_blank" rel="noopener">${esc(n0.titulo)}</a> <span class="faint" style="font-size:12px">· ${esc(n0.fuente||"")}${n0.fecha?" · "+hace(n0.fecha):""}</span>`:'<span class="faint">sin titular en Yahoo</span>'}</td></tr>`}).join("")}</tbody></table></div>`}
 
@@ -991,12 +994,13 @@ function renderMercado(){const el=$("#tab-mercado");
     <details class="note"><summary><b>Cómo usarlo</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
       <span><b>En tendencia:</b> las acciones que más gente está buscando en Yahoo Finance ahora. <b>Más suben / caen / transadas:</b> listas del día de Yahoo (EE.UU., empresas medianas y grandes).</span>
       <span><b>Por qué se mueve:</b> el titular más reciente de esa acción. Si no hay titular, el movimiento puede ser por redes o por arrastre de su sector.</span>
-      <span><b>¿En el WLS?:</b> solo pueden comprar las que están en el WLS. Si dice “analizada”, hagan clic para ver la ficha completa y la recomendación.</span>
+      <span><b>¿En el WLS?:</b> solo pueden comprar las que están en el WLS. Hagan clic en cualquier fila para ver su ficha; si dice “analizada”, se abre la ficha completa con la recomendación.</span>
       <span><b>Ojo:</b> si una ya subió +10% hoy, con los ~20 min que tarda la orden llegan tarde. Sirve más para entender qué tema está de moda y buscar otras del WLS del mismo sector que aún no se han movido.</span></div></details></div>
   ${secDolar()}${secVix()}`;
   bindMercado(el)}
 function bindMercado(el){
   el.querySelectorAll("[data-tema]").forEach(b=>b.onclick=()=>{window._temaN=b.dataset.tema||null;renderMercado()});
+  el.querySelectorAll("[data-tk]").forEach(r=>r.onclick=ev=>{if(ev.target.closest("a"))return;const t=r.dataset.tk;EV.has(t)?detalle(t):detalleTend(t)});
   el.querySelectorAll("[data-tend]").forEach(b=>b.onclick=()=>{vistaTend=b.dataset.tend;store("gtc-tend",vistaTend);renderMercado()});
   el.querySelectorAll("[data-intra]").forEach(b=>b.onclick=()=>{let s=load("gtc-intra")||["^IXIC","^GSPC","^VIX"];const t=b.dataset.intra;s=s.includes(t)?s.filter(x=>x!==t):[...s,t];store("gtc-intra",s);renderMercado()});
   el.querySelectorAll("[data-mon]").forEach(b=>b.onclick=()=>{monSel=b.dataset.mon;store("gtc-mon",monSel);renderMercado()});
@@ -1083,6 +1087,27 @@ function diagnostico(L,buy){const resto=L.filter(e=>!e.acc.startsWith("COMPRAR")
     <li>Esto es intencional: es mejor no comprar que comprar sin razones. Las más cercanas están abajo; si alguna les convence por su cuenta (noticias, Bloomberg), pueden comprarla con un monto menor.</li></ul>
   <div class="grid g3">${resto.slice(0,6).map(e=>tarjeta(e,true)).join("")}</div></div>`}
 
+
+/* ficha corta para acciones en tendencia que no estan entre las analizadas */
+function detalleTend(t){const T=M?.tendencia||{};const x=Object.values(T).flat().find(y=>y.t===t);if(!x)return;
+  const o=U?.porT?.get(t)||null,listas=Object.entries(T).filter(([k,l])=>l.some(y=>y.t===t)).map(([k])=>({trending:"en tendencia",suben:"de las que más suben",caen:"de las que más caen",activas:"de las más transadas"})[k]);
+  const lect=[];
+  if(!x.enWLS)lect.push("No está en el WLS: no se puede comprar en el desafío. Sirve para ver qué tema está moviendo al mercado y buscar acciones del mismo sector que sí estén.");
+  else{if((x.r1d??0)>=8)lect.push(`Ya subió ${sgn(x.r1d,1)} hoy: con los ~20 min de la orden probablemente llegan tarde. Si mañana sigue con volumen alto, puede ser ola de varios días.`);
+    else if((x.r1d??0)<=-8)lect.push(`Cayó ${sgn(x.r1d,1)} hoy. Comprar después de una caída fuerte es apostar a un rebote: solo si la noticia no es grave.`);
+    else lect.push("Está en el WLS y se puede comprar. No está entre las ~90 analizadas a fondo, así que no tiene recomendación automática: revisen la noticia y en Bloomberg (CN, ANR) antes de decidir.");
+    if(o&&o.pxusd!=null&&o.pxusd<5)lect.push(`Precio US$${fmt(o.pxusd,2)}: la comisión por acción pesa ${fmt(2*COMISION/o.pxusd*100,1)}% ida y vuelta.`)}
+  if((x.volx??0)>=2)lect.push(`Se está transando ${fmt(x.volx,1)}× su volumen normal: hay mucho interés, el movimiento tiene fuerza.`);
+  $("#drawer").innerHTML=`<div class="scrim" data-cerrar></div><aside class="drawer" role="dialog" aria-label="Detalle de ${esc(t)}"><button class="btn small x" data-cerrar>Cerrar ✕</button>
+    <div><div class="row"><h2 class="mono">${esc(o?.bbg||t)}</h2>${x.enWLS?'<span class="chip good">en el WLS</span>':'<span class="chip">no está en el WLS</span>'}</div><div class="sub">${esc(x.nombre||o?.nombre||"")} · ${listas.join(", ")} en Yahoo Finance hoy</div></div>
+    <div class="kpis"><div class="kpi"><div class="l">Hoy</div><div class="v">${pct(x.r1d,1)}</div></div><div class="kpi"><div class="l">Volumen vs normal</div><div class="v">${x.volx!=null?fmt(x.volx,1)+"×":"–"}</div></div>
+      ${o?`<div class="kpi"><div class="l">Semana</div><div class="v">${pct(o.r1s,1)}</div></div><div class="kpi"><div class="l">Mes</div><div class="v">${pct(o.r1m,1)}</div></div><div class="kpi"><div class="l">3 meses</div><div class="v">${pct(o.r3m,1)}</div></div>`:""}
+      ${x.precio!=null?`<div class="kpi"><div class="l">Precio</div><div class="v">US$${fmt(x.precio,2)}</div></div>`:""}${x.mcap?`<div class="kpi"><div class="l">Tamaño</div><div class="v" style="font-size:16px">${fmtCap(x.mcap)||"–"}</div></div>`:""}</div>
+    <div class="panel"><h3>Cómo leerla</h3><ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:13px">${lect.map(l=>`<li>${l}</li>`).join("")}</ul></div>
+    ${o?`<div class="panel"><h3>Riesgo</h3><div>Volatilidad 90 días: ${o.vol90!=null?fmt(o.vol90,0)+"%":"–"} · Beta: ${fmt(o.beta,2)} · correlación con el mercado: ${fmt(o.corr,2)}</div><div>Liquidez: US$${fmt(o.liq,1)} M/día · RSI ${fmt(o.rsi,0)} · a ${fmt(o.dist52,0)}% de su máximo de 52 semanas</div></div>`:""}
+    <div class="panel"><h3>Noticias de las últimas 48 h</h3>${(x.noticias||[]).map(n=>`<div><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.titulo)}</a> <span class="faint">· ${esc(n.fuente||"")}${n.fecha?" · "+hace(n.fecha):""}</span></div>`).join("")||'<span class="faint">Sin titulares recientes. El movimiento puede venir de redes, de su sector o de un informe de analista.</span>'}
+      <div><a href="https://finance.yahoo.com/quote/${encodeURIComponent(t)}" target="_blank" rel="noopener">Ver ${esc(t)} en Yahoo Finance ↗</a></div></div>
+  </aside>`;bindComunes($("#drawer"))}
 /* ===================== GENERAL ===================== */
 function bindComunes(root){root.querySelectorAll("[data-armar]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();toggleArmar(b.dataset.armar)});
   root.querySelectorAll("[data-ver]").forEach(b=>b.onclick=ev=>{if(ev.target.closest("[data-armar]"))return;ev.stopPropagation();detalle(b.dataset.ver)});
