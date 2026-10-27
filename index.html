@@ -437,7 +437,7 @@ function cinta(){const el=$("#cinta");const M=[["US","EE.UU."],["LN","Londres"],
   el.innerHTML=M.map(([c,n])=>{const e=estadoBolsa(c),ab=e.fase==="abierta",pa=!ab?proximaApertura(c):null;return`<span class="mk" title="${esc(e.txt)}"><span class="dot ${ab?"on":""}"></span><b>${n}</b><span class="t">${ab?"cierra "+horaChile(c,BOLSAS[c].ses[BOLSAS[c].ses.length-1][1]):"abre "+(pa?pa.txt:"")}</span></span>`}).join("")+
     F.map(f=>`<span class="mk"><b>${esc(f.nombre)}</b><span class="${f.r1d>=0?"up":"down"} mono">${sgn(f.r1d,2)}</span></span>`).join("")}
 function renderAhora(){const el=$("#tab-ahora");
-  if(!C){el.innerHTML=`<div class="empty"><h2>Todavía no hay recomendaciones</h2><p>Se generan en la próxima actualización completa de GitHub (archivo candidatos.json). Ve a Actions → Run workflow y vuelve en ~1 hora.</p></div>`;return}
+  if(!C){el.innerHTML=`<div class="empty"><h2>Todavía no hay recomendaciones</h2><p>Se generan en la próxima actualización completa de GitHub (archivo candidatos.json). Ve a Actions → Run workflow y vuelve en ~1 hora.</p></div>`+calendarioAhora();bindComunes(el);return}
   const L=[...EV.values()],buy=L.filter(e=>e.acc.startsWith("COMPRAR")).sort((a,b)=>b.sc-a.sc),wait=L.filter(e=>e.acc==="ESPERAR").sort((a,b)=>b.sc-a.sc),watch=L.filter(e=>e.acc==="VIGILAR").sort((a,b)=>b.sc-a.sc);
   const pos=decisionesCartera().filter(x=>x.acc!=="MANTENER");
   el.innerHTML=`
@@ -449,6 +449,7 @@ function renderAhora(){const el=$("#tab-ahora");
     <div class="kpi"><div class="l">Analizadas</div><div class="v">${L.length}</div><div class="s">actualizadas ${hace(C.generado)}</div></div>
   </div>
   ${pos.length?`<div class="panel"><header><h2>Tu cartera: qué hacer</h2><span class="sub">según tus posiciones de TMSG</span></header><div class="grid g2">${pos.map(tarjetaPos).join("")}</div></div>`:""}
+  ${calendarioAhora()}
   <div class="panel"><header><h2>Comprar</h2><span class="sub">Ordenadas por puntaje. Verde = bolsa abierta ahora · azul = bolsa cerrada, la orden se ejecuta al abrir.</span></header>
     ${buy.length?`<div class="grid g2">${buy.slice(0,10).map(e=>tarjeta(e)).join("")}</div>`:`<div class="empty">Ninguna acción cumple todas las condiciones para comprar en este momento. Revisa “Vigilar”.</div>`}</div>
   ${wait.length?`<div class="panel"><header><h2>Esperar</h2><span class="sub">Buenas señales, pero ya subieron mucho hoy con su bolsa abierta.</span></header><div class="grid g3">${wait.slice(0,6).map(e=>tarjeta(e,true)).join("")}</div></div>`:""}
@@ -548,23 +549,85 @@ function caja(titulo,para,hoy,visual,leer){return`<div class="panel"><header><h2
   <div class="note" style="border-style:solid;border-color:#0c4a6e;color:#dbeafe;background:#04172b"><b style="color:#7dd3fc">Qué significa hoy</b><ul style="margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px">${hoy.map(x=>`<li>${x}</li>`).join("")}</ul></div>
   ${visual}<details class="note"><summary><b>Cómo leerlo</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">${leer}</div></details></div>`}
 
+/* ===================== CALENDARIO (macro + resultados) ===================== */
+/* Fechas verificadas en federalreserve.gov, bea.gov, bls.gov, ecb.europa.eu, boj.or.jp, bankofengland.co.uk y bcentral.cl. Horas en hora de Chile. */
+const MACRO=[
+ {fecha:"2026-10-27",hora:"18:00",pais:"🇨🇱 Chile",evento:"Banco Central de Chile: decisión de tasas",imp:"media",reg:"Chile",
+  efecto:"Mueve sobre todo las acciones chilenas y el peso. Si baja tasas, suelen subir bancos y retail chilenos; si sorprende subiendo, bajan."},
+ {fecha:"2026-10-28",hora:"15:00",pais:"🇺🇸 EE.UU.",evento:"Fed: decisión de tasas (y conferencia 15:30)",imp:"alta",reg:"Todo el mundo",
+  efecto:"Es el evento que más mueve el mercado mundial. Si la Fed baja tasas o habla de bajarlas, suben tecnología y small caps; si suena dura, bajan. El efecto sigue al día siguiente en Asia y Europa. Eviten comprar fuerte justo antes de las 15:00."},
+ {fecha:"2026-10-29",hora:"09:30",pais:"🇺🇸 EE.UU.",evento:"PIB del 3er trimestre + inflación PCE de septiembre",imp:"alta",reg:"EE.UU.",
+  efecto:"El PIB dice si la economía crece; el PCE es la inflación que más mira la Fed. PIB fuerte con inflación baja = bueno para acciones. Inflación alta = malo para tecnológicas."},
+ {fecha:"2026-10-29",hora:"10:15",pais:"🇪🇺 Europa",evento:"Banco Central Europeo (BCE): decisión de tasas",imp:"alta",reg:"Europa",
+  efecto:"Mueve las acciones europeas y el euro. Tasas más bajas ayudan a las empresas que se endeudan (industria, inmobiliarias); los bancos europeos prefieren tasas altas."},
+ {fecha:"2026-10-30",hora:"≈ 00:00",pais:"🇯🇵 Japón",evento:"Banco de Japón: decisión de tasas (noche del jueves)",imp:"alta",reg:"Japón y Asia",
+  efecto:"Se conoce de madrugada en Chile, antes de que abra Tokio. Si sube tasas, el yen se fortalece y bajan los exportadores japoneses (autos, electrónica). Si no hay cambio, poco efecto."},
+ {fecha:"2026-11-03",hora:"todo el día",pais:"🇺🇸 EE.UU.",evento:"Elecciones de mitad de período (Congreso)",imp:"alta",reg:"EE.UU.",
+  efecto:"Los resultados se conocen en la noche y el mercado reacciona el miércoles 4. Mueve sectores sensibles a la política: salud, energía, defensa, bancos. Puede haber volatilidad; no conviene tomar posiciones gigantes justo antes."},
+ {fecha:"2026-11-05",hora:"09:00",pais:"🇬🇧 Reino Unido",evento:"Banco de Inglaterra: tasas + Informe de Política Monetaria",imp:"media",reg:"Reino Unido",
+  efecto:"Mueve las acciones del Reino Unido y la libra. Bajar tasas ayuda a constructoras, retail e inmobiliarias inglesas."},
+ {fecha:"2026-11-06",hora:"10:30",pais:"🇺🇸 EE.UU.",evento:"Informe de empleo de octubre",imp:"alta",reg:"Todo el mundo",
+  efecto:"Mucho empleo = economía fuerte pero la Fed baja menos las tasas. Poco empleo = miedo a recesión. Una sorpresa grande mueve todo el mercado ese viernes."},
+ {fecha:"2026-11-10",hora:"10:30",pais:"🇺🇸 EE.UU.",evento:"IPC (inflación) de octubre",imp:"alta",reg:"Todo el mundo",
+  efecto:"Inflación más alta de lo esperado = tasas altas por más tiempo = bajan tecnológicas y small caps. Más baja de lo esperado = suben."},
+ {fecha:"2026-11-13",hora:"10:30",pais:"🇺🇸 EE.UU.",evento:"Precios al productor (PPI) de octubre · ÚLTIMO DÍA del desafío",imp:"media",reg:"EE.UU.",
+  efecto:"Dato de inflación de menor impacto que el IPC. Lo importante: es el último día, así que la cartera debe estar armada desde antes."},
+];
+const IMP_CHIP={alta:"bad",media:"warn",baja:""};
+/* proximos n dias habiles (fechas YYYY-MM-DD) hasta el fin del desafio */
+function diasHabiles(n){const hoyD=new Date();hoyD.setHours(12,0,0,0);const out=[];for(let d=new Date(hoyD);out.length<n&&d<=FIN;d.setDate(d.getDate()+1)){if(d.getDay()%6)out.push(d.toISOString().slice(0,10))}return out}
+/* reportes de resultados de las acciones que seguimos, por fecha */
+function reportesPorDia(dias){const rep={};const add=(f,t)=>{if(!f)return;f=f.slice(0,10);if(!dias.includes(f))return;(rep[f]=rep[f]||new Set()).add(t)};
+  (D?.acciones||[]).forEach(a=>add(a.earn,a.t));CANDS().forEach(it=>add(it.info?.earn,it.t));return rep}
+function cuandoTxt(f){const dd=diasHasta(f);return dd===0?"HOY":dd===1?"MAÑANA":DIAS_N[new Date(f+"T12:00").getDay()]+" "+fecha(f)}
+function calendarioAhora(){const dias=diasHabiles(6);if(!dias.length)return"";
+  const mias=new Set(misAcciones().map(x=>x.t)),compra=new Set([...EV.values()].filter(e=>e.acc.startsWith("COMPRAR")).map(e=>e.t));
+  const rep=reportesPorDia(dias);
+  const filas=dias.map(f=>{const mc=MACRO.filter(e=>e.fecha===f),rp=[...(rep[f]||[])];
+    const tuyas=rp.filter(t=>mias.has(t)),reco=rp.filter(t=>!mias.has(t)&&compra.has(t)),otras=rp.filter(t=>!mias.has(t)&&!compra.has(t));
+    const chipT=(t,c)=>`<span class="chip ${c}" title="${esc(nombreT(t))}">${esc(bbgT(t))}</span>`;
+    const hoyEs=diasHasta(f)===0;
+    return`<div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;padding:10px 0;border-top:1px solid var(--line)">
+      <div><b style="${hoyEs?"color:var(--info)":""}">${cuandoTxt(f)}</b><div class="faint" style="font-size:12px">${diasHasta(f)<=1?fecha(f):""}</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${mc.map(e=>`<div><div class="row" style="gap:6px"><span class="chip ${IMP_CHIP[e.imp]}">${e.imp==="alta"?"IMPACTO ALTO":"impacto medio"}</span><span class="mono faint" style="font-size:12px">${esc(e.hora)}</span><span>${e.pais}</span><b>${esc(e.evento)}</b></div>
+          <div style="color:#c9d5e6;font-size:13px;margin-top:3px">${esc(e.efecto)} <span class="faint">Afecta: ${esc(e.reg.replace(/\.$/,""))}.</span></div></div>`).join("")}
+        ${rp.length?`<div><div class="row" style="gap:6px"><span class="chip info">resultados</span><b>${rp.length} empresa${rp.length>1?"s":""} que seguimos publica${rp.length>1?"n":""} estados de resultados</b></div>
+          <div class="row" style="gap:4px;margin-top:5px">${tuyas.map(t=>chipT(t,"info")).join("")}${reco.map(t=>chipT(t,"good")).join("")}${otras.slice(0,10).map(t=>chipT(t,"")).join("")}${otras.length>10?`<span class="faint" style="font-size:12px">+${otras.length-10} más (ver ④ Agenda)</span>`:""}</div>
+          ${tuyas.length?`<div style="color:#fcd34d;font-size:13px;margin-top:4px">⚠ ${tuyas.map(t=>esc(bbgT(t))).join(", ")} ${tuyas.length>1?"son tuyas":"es tuya"}: ese día se puede mover ±10%. Decidan antes si la mantienen, la reducen o la venden.</div>`:""}</div>`:""}
+        ${!mc.length&&!rp.length?`<span class="faint">Sin eventos importantes. Día “normal”: manda la ola y las noticias de cada empresa.</span>`:""}
+      </div></div>`}).join("");
+  const prox=MACRO.find(e=>diasHasta(e.fecha)>=0&&e.imp==="alta");
+  return`<div class="panel"><header><h2>📅 Calendario: lo que viene</h2><span class="sub">Próximos ${dias.length} días hábiles · horas de Chile</span></header>
+    ${prox?`<div class="note" style="border-style:solid;border-color:#0c4a6e;color:#dbeafe;background:#04172b"><b style="color:#7dd3fc">Lo más importante:</b> ${esc(prox.evento)} — ${cuandoTxt(prox.fecha).toLowerCase()} a las ${esc(prox.hora)} (hora Chile).</div>`:""}
+    <div>${filas}</div>
+    <div class="legend"><span class="chip bad">impacto alto</span> mueve todo el mercado · <span class="chip warn">impacto medio</span> mueve una región · <span class="chip info">tuya</span> <span class="chip good">recomendada para comprar</span> <span class="chip">otras que seguimos</span></div>
+    <details class="note"><summary><b>Cómo leer el calendario</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
+      <span><b>Eventos macro</b> (bancos centrales, inflación, empleo, elecciones): no son de una empresa, sino de un país. Cuando el dato sale distinto a lo que el mercado esperaba, se mueven <i>todas</i> las acciones de esa región, a veces 1–3% en minutos. Lo que importa no es si el dato es “bueno” o “malo”, sino si <b>sorprende</b>.</span>
+      <span><b>Tasas de interés:</b> bajar tasas suele hacer subir las acciones (sobre todo tecnología y empresas chicas); subirlas, bajar. Por eso la Fed es lo más importante del mes.</span>
+      <span><b>Estados de resultados (earnings):</b> cada trimestre la empresa publica cuánto vendió y ganó. Si le fue mejor que lo esperado, puede subir 5–15% ese día; si peor, bajar lo mismo. Tenerla ese día es una apuesta.</span>
+      <span><b>Cómo usarlo:</b> (1) si una acción tuya reporta pronto, decidan antes si la mantienen; (2) eviten armar posiciones grandes justo antes de un evento de impacto alto; (3) después del evento, las olas suelen ser más claras.</span>
+      <span><b>Ojo con la hora:</b> EE.UU. cambia de horario el domingo 1 de noviembre. Desde el lunes 2, Nueva York abre a las 11:30 de Chile (hoy abre a las 10:30) y sus datos de las 8:30 salen a las 10:30 de Chile.</span>
+      <span class="faint">Resultados: solo las ~90 empresas que seguimos (tu cartera, candidatas y mejores por factores). Fuentes macro: Fed, BEA, BLS, BCE, Banco de Japón, Banco de Inglaterra y Banco Central de Chile.</span>
+    </div></details></div>`}
+
 /* 1. Agenda */
 function secAgenda(){const hoyD=new Date();hoyD.setHours(12,0,0,0);const dias=[];for(let d=new Date(hoyD);dias.length<10&&d<=FIN;d.setDate(d.getDate()+1)){if(d.getDay()%6)dias.push(d.toISOString().slice(0,10))}
   const mias=new Set(misAcciones().map(x=>x.t)),compra=new Set([...EV.values()].filter(e=>e.acc.startsWith("COMPRAR")).map(e=>e.t));
   const rep={};const add=(f,t,src)=>{if(!f||!dias.includes(f))return;(rep[f]=rep[f]||new Map()).set(t,src)};
   (D?.acciones||[]).forEach(a=>add(a.earn,a.t));CANDS().forEach(it=>add(it.info?.earn,it.t));
-  const mac=(D?.macro||[]).filter(e=>dias.includes(e.fecha));
+  const mac=MACRO.filter(e=>dias.includes(e.fecha));
   const hoy=[];const misRep=[];Object.entries(rep).forEach(([f,m])=>[...m.keys()].forEach(t=>{if(mias.has(t))misRep.push([f,t])}));
-  mac.slice(0,2).forEach(e=>{const dd=diasHasta(e.fecha);hoy.push(`<b>${esc(e.evento)}</b> ${dd===0?"hoy":dd===1?"mañana":"el "+DIAS_N[new Date(e.fecha+"T12:00").getDay()]+" "+fecha(e.fecha)}. ${e.tipo==="fed"?"La decisión de tasas suele mover todo el mercado ese día y el siguiente, sobre todo tecnología y small caps.":"Un dato de inflación o empleo distinto a lo esperado mueve las tasas y con ellas a las acciones."}`)});
+  mac.filter(e=>e.imp==="alta").slice(0,3).forEach(e=>{const dd=diasHasta(e.fecha);hoy.push(`<b>${esc(e.evento)}</b> ${dd===0?"hoy":dd===1?"mañana":"el "+DIAS_N[new Date(e.fecha+"T12:00").getDay()]+" "+fecha(e.fecha)} a las ${esc(e.hora)} (Chile). ${esc(e.efecto)}`)});
   if(misRep.length)hoy.push(`De tus acciones (armada o actuales) reportan pronto: ${misRep.map(([f,t])=>`<b>${esc(bbgT(t))}</b> (${fecha(f)})`).join(", ")}. El día del reporte se pueden mover ±10%: decidan antes si mantienen el tamaño.`);
   else hoy.push("Ninguna de tus acciones reporta en los próximos días hábiles.");
   const nRep=Object.values(rep).reduce((s,m)=>s+m.size,0);hoy.push(`En total hay ${nRep} reportes de acciones que seguimos en los próximos ${dias.length} días hábiles.`);
   const vis=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${dias.map(f=>{const d=new Date(f+"T12:00"),m=rep[f]?[...rep[f].keys()]:[],mc=mac.filter(e=>e.fecha===f);
-    return`<div class="card" style="padding:10px;gap:6px${f===dias[0]?";border-color:#0284c7":""}"><b>${DIAS_N[d.getDay()]} ${fecha(f)}</b>${mc.map(e=>`<span class="chip warn" style="white-space:normal">${esc(e.evento)}</span>`).join("")}
+    return`<div class="card" style="padding:10px;gap:6px${f===dias[0]?";border-color:#0284c7":""}"><b>${DIAS_N[d.getDay()]} ${fecha(f)}</b>${mc.map(e=>`<span class="chip ${IMP_CHIP[e.imp]}" style="white-space:normal;border-radius:8px" title="${esc(e.efecto)}">${esc(e.hora)} · ${esc(e.evento)}</span>`).join("")}
       ${m.slice(0,8).map(t=>`<span class="chip ${mias.has(t)?"info":compra.has(t)?"good":""}" title="${esc(nombreT(t))}">${esc(bbgT(t))}</span>`).join("")}${m.length>8?`<span class="faint" style="font-size:12px">+${m.length-8} más</span>`:""}${!m.length&&!mc.length?'<span class="faint" style="font-size:12px">sin eventos</span>':""}</div>`}).join("")}</div>
-    <div class="legend"><span class="chip warn">macro</span><span class="chip info">tuya</span><span class="chip good">recomendada para comprar</span><span class="chip">otras que seguimos</span></div>`;
+    <div class="legend"><span class="chip bad">macro: impacto alto</span><span class="chip warn">macro: impacto medio</span><span class="chip info">tuya</span><span class="chip good">recomendada para comprar</span><span class="chip">otras que seguimos</span></div>`;
   return caja("Agenda: resultados y datos macro","Qué puede mover los precios en los próximos días",hoy,vis,
-    `<span><b>Resultados (earnings):</b> el día que una empresa reporta, su acción puede subir o bajar 5–15% en minutos. Si tienen la acción ese día, están apostando al resultado.</span><span><b>Macro:</b> la Fed (tasas), el IPC (inflación) y el empleo de EE.UU. mueven todo el mercado. Con tasas más altas sufren más las tecnológicas y las small caps.</span><span><b>Cómo usarlo:</b> antes de comprar, mira si reporta en ≤ 3 días. Si sí, decidan si quieren esa apuesta o esperan al día siguiente del reporte.</span>`)}
+    `<span><b>Resultados (earnings):</b> el día que una empresa reporta, su acción puede subir o bajar 5–15% en minutos. Si tienen la acción ese día, están apostando al resultado.</span><span><b>Macro:</b> bancos centrales (Fed, BCE, Japón, Inglaterra, Chile), inflación, empleo y elecciones. Rojo = mueve todo el mercado; amarillo = mueve una región. Pasa el mouse sobre un evento para ver qué efecto tiene. La Fed, el IPC y el empleo de EE.UU. son los más fuertes. Con tasas más altas sufren más las tecnológicas y las small caps.</span><span><b>Cómo usarlo:</b> antes de comprar, mira si reporta en ≤ 3 días. Si sí, decidan si quieren esa apuesta o esperan al día siguiente del reporte.</span>`)}
 
 /* 2. Contagio */
 function secContagio(){const L=(D?.contagio||[]).map(l=>({...l,dias:l.proximo?diasHasta(l.proximo):null}));if(!L.length)return caja("Contagio entre empresas","Cuando una empresa grande reporta, ¿quién se mueve con ella?",["Aún no hay datos de contagio."],"","");
