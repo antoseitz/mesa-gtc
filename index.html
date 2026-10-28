@@ -736,23 +736,49 @@ function renderEntender(){const el=$("#tab-entender");
   el.querySelectorAll("[data-mc]").forEach(b=>b.onclick=()=>{mcFuente=b.dataset.mc;store("gtc-mc",mcFuente);renderEntender()});bindComunes(el)}
 
 /* ===================== MI CARTERA (TMSG) ===================== */
+const ORD_ACC=a=>({"VENDER LO ANTES POSIBLE":0,"REDUCIR ANTES DEL REPORTE":1,"TOMAR GANANCIA PARCIAL":2,"ROTAR":3}[a]??4);
 function decisionesCartera(){const s=PORT.snaps[PORT.snaps.length-1];if(!s)return[];
+  const quedan=diasHabilesHastaFin();
+  // misma accion en varias ideas: se suman para ver el tamano real
+  const total={};s.pos.forEach(p=>{const k=claveTicker(p.k);total[k]=(total[k]||0)+(p.gross||0)});
   return s.pos.map(p=>{const k=claveTicker(p.k),o=U?.porB?.get(k)||{},e=o.t?EV.get(o.t):null,code=codBolsa(p.k.includes(" ")?p.k:p.k+" US");
-    const r=[],est=BOLSAS[code]?estadoBolsa(code):{fase:"?"},pa=BOLSAS[code]&&est.fase!=="abierta"?proximaApertura(code):null,b=BOLSAS[code];
-    let acc="MANTENER",cls="a-hold";
-    const tn=e?e.tn:{s:0,n:0},dE=diasHasta(e?.it.info?.earn);
-    const malMomentum=(o.r1s??0)<0&&(o.r1m??0)<0;
-    if((p.rel??0)<=-8&&malMomentum){acc="VENDER LO ANTES POSIBLE";cls="a-sell";r.push(`Va ${sgn(p.rel)} contra el WLS y su tendencia es negativa (semana ${sgn(o.r1s)}, mes ${sgn(o.r1m)})`)}
-    else if(tn.s<=-2){acc="VENDER LO ANTES POSIBLE";cls="a-sell";r.push(`Noticias recientes negativas: “${e.it.noticias[0]?.titulo||""}”`)}
-    else if((p.abs??0)>=15&&(o.r1d??0)<0&&(o.r1s??0)<0){acc="TOMAR GANANCIA PARCIAL";cls="a-wait";r.push(`Gana ${sgn(p.abs)} pero empezó a bajar (día ${sgn(o.r1d)}, semana ${sgn(o.r1s)}): asegurar parte`)}
-    else{if(e&&e.acc.startsWith("COMPRAR"))r.push("Sigue con señales de compra: mantener o incluso aumentar");else if(!malMomentum)r.push(`Tendencia aún positiva (semana ${sgn(o.r1s)}, mes ${sgn(o.r1m)})`);else r.push(`Tendencia débil, pero sin señales de venta fuertes todavía`)}
-    if(dE!=null&&dE>=0&&dE<=3)r.push(`⚠ Reporta resultados en ${dE} día${dE===1?"":"s"}: decidan antes si mantienen el tamaño`);
-    if(p.sh&&p.sh*COMISION/p.gross>=0.003)r.push(`Venderla cuesta ${usd(p.sh*COMISION)} en comisión (${fmt(100*p.sh*COMISION/p.gross,2)}%)`);
-    const cuando=acc==="MANTENER"?"":est.fase==="abierta"?`Su bolsa está abierta: dar la orden antes de las ${horaChile(code,b.ses[b.ses.length-1][1]-0.5)} (Chile)`:`Su bolsa está cerrada: la orden se ejecuta al abrir (${pa?pa.txt:"próxima sesión"})`;
-    return{p,o,acc,cls,r,cuando,code}})}
-function tarjetaPos(x){return`<article class="dec"><div class="bar ${x.cls}">${esc(x.acc)}</div><div class="body"><div class="tk"><b>${esc(x.p.k)}</b><span>${esc(x.p.des||"")}</span>${BOLSAS[x.code]?chipBolsa(x.code):""}</div>
-  <div class="row mono" style="gap:14px;font-size:12.5px"><span>${usd(x.p.gross)}</span><span>Total ${pct(x.p.abs)}</span><span>vs WLS ${pct(x.p.rel)}</span></div>
-  <ul>${x.r.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${x.cuando?`<div class="plan"><span><b>Cuándo:</b> ${esc(x.cuando)}</span></div>`:""}</div></article>`}
+    const r=[],al=[],est=BOLSAS[code]?estadoBolsa(code):{fase:"?"},pa=BOLSAS[code]&&est.fase!=="abierta"?proximaApertura(code):null,b=BOLSAS[code];
+    const tn=e?e.tn:{s:0,n:0},dE=diasHasta(e?.it.info?.earn),abs=p.abs??0,rel=p.rel??0,sinDatos=o.r1s==null;
+    const cae=(o.r1d??0)<0&&(o.r1s??0)<0,sube=(o.r1s??0)>0,sobrecomprada=(o.rsi??0)>=75||(o.r1d??0)>=8;
+    let acc="MANTENER",cls="a-hold",cuanto="";
+    // 1) cortar perdidas: pierde contra el WLS y sigue cayendo
+    if(rel<=-5&&(cae||sinDatos&&rel<=-7)){acc="VENDER LO ANTES POSIBLE";cls="a-sell";cuanto="toda la posición";r.push(`Pierde ${sgn(rel)} contra el WLS${sinDatos?"":` y sigue cayendo (día ${sgn(o.r1d)}, semana ${sgn(o.r1s)})`}. Quedan ${quedan} sesiones: mejor liberar la plata para una acción con ola.`)}
+    else if(tn.s<=-2){acc="VENDER LO ANTES POSIBLE";cls="a-sell";cuanto="toda la posición";r.push(`Noticias recientes negativas: “${e.it.noticias[0]?.titulo||""}”`)}
+    // 2) reporta resultados hoy o manana con ganancia: asegurar parte antes
+    else if(dE!=null&&dE>=0&&dE<=1&&abs>=8){acc="TOMAR GANANCIA PARCIAL";cls="a-wait";cuanto="vender ~la mitad";r.push(`Reporta resultados ${dE===0?"hoy":"mañana"} (${fecha(e.it.info.earn)}) y ya gana ${sgn(abs)}. El día del reporte puede moverse ±10% para cualquier lado: vender la mitad asegura ganancia y deja la otra mitad para el resultado.`)}
+    else if(dE!=null&&dE>=0&&dE<=1&&abs<0){acc="REDUCIR ANTES DEL REPORTE";cls="a-wait";cuanto="vender ~la mitad";r.push(`Reporta resultados ${dE===0?"hoy":"mañana"} y va ${sgn(abs)}. Si el reporte sale malo, la pérdida crece: reducir antes.`)}
+    // 3) ganancia grande y se esta dando vuelta o esta sobrecomprada
+    else if(abs>=15&&(cae||sobrecomprada)){acc="TOMAR GANANCIA PARCIAL";cls="a-wait";cuanto="vender ~1/3";r.push(cae?`Gana ${sgn(abs)} pero empezó a bajar (día ${sgn(o.r1d)}, semana ${sgn(o.r1s)}): asegurar parte.`:`Gana ${sgn(abs)} y está sobrecomprada (${(o.rsi??0)>=75?"RSI "+fmt(o.rsi,0):"subió "+sgn(o.r1d)+" hoy"}): suele corregir; asegurar parte.`)}
+    // 4) plata quieta: casi no se mueve y no tiene ola
+    else if(Math.abs(abs)<3&&!sube&&!(e&&e.acc.startsWith("COMPRAR"))){acc="ROTAR";cls="a-wait";cuanto="toda la posición";r.push(`Va ${sgn(abs)} desde la compra y no tiene impulso${sinDatos?"":` (semana ${sgn(o.r1s)})`}. Quedan ${quedan} sesiones: esa plata rinde más en una acción con ola (ver ② Qué hacer ahora).`)}
+    else{if(e&&e.acc.startsWith("COMPRAR"))r.push("Sigue con señales de compra: mantener o incluso aumentar.");
+      else if(sinDatos)r.push("Yahoo no entregó sus datos hoy: no se puede leer la tendencia. Revisen en Bloomberg (GP) antes de decidir.");
+      else if(sube)r.push(`Tendencia positiva esta semana (${sgn(o.r1s)}).`);
+      else r.push(`Semana ${sgn(o.r1s)}: perdió impulso, pero sin señales fuertes de venta.`)}
+    // stop sugerido: protege la mitad de la ganancia o limita la perdida a -5% desde hoy
+    if(acc==="MANTENER"&&p.px){const st=abs>=10?(1+abs/200)/(1+abs/100):0.95;r.push(`Stop sugerido: vender si baja a ${fmt(p.px*st,p.px>=1000?0:2)} (${sgn((st-1)*100,1)} desde hoy)${abs>=10?", así se queda al menos con la mitad de la ganancia":""}.`)}
+    if(dE!=null&&dE>=2&&dE<=5)al.push(`Reporta resultados en ${dE} días (${fecha(e.it.info.earn)}): decidan antes qué hacer.`);
+    if(total[k]>MAXPOS*0.9)al.push(`Entre todas sus compras de esta acción suman ${usd(total[k])}: están cerca del máximo de ${usd(MAXPOS)}.`);
+    else if(total[k]>p.gross+1)al.push(`Tienen esta acción en más de una compra: en total ${usd(total[k])}.`);
+    if(!sinDatos&&o.r1m!=null&&o.r1m<-15&&abs>10)al.push(`Ojo: Yahoo dice ${sgn(o.r1m)} en el mes, pero TMSG dice ${sgn(abs)} desde la compra. Puede ser un dato malo de Yahoo: confirmen en Bloomberg (GP).`);
+    if(p.sh&&acc!=="MANTENER"&&p.sh*COMISION/p.gross>=0.003)al.push(`Venderla cuesta ${usd(p.sh*COMISION)} en comisión (${fmt(100*p.sh*COMISION/p.gross,2)}%).`);
+    const cuando=acc==="MANTENER"?"":est.fase==="abierta"?`Su bolsa está abierta: dar la orden antes de las ${horaChile(code,b.ses[b.ses.length-1][1]-0.5)} (Chile)`:`Su bolsa está cerrada: la orden se ejecuta al abrir (${pa?pa.txt+" hora Chile":"próxima sesión"})`;
+    return{p,o,acc,cls,r:r.concat(al.map(x=>"⚠ "+x)),cuando,cuanto,code}})}
+function tarjetaPos(x){return`<article class="dec"><div class="bar ${x.cls}">${esc(x.acc)}${x.cuanto?` · ${esc(x.cuanto)}`:""}</div><div class="body"><div class="tk"><b>${esc(x.p.k)}</b><span>${esc(x.p.des||"")}</span>${BOLSAS[x.code]?chipBolsa(x.code):""}</div>
+  <div class="row mono" style="gap:14px;font-size:12.5px"><span>${usd(x.p.gross)}</span><span>Total ${pct(x.p.abs)}</span><span>vs WLS ${pct(x.p.rel)}</span>${x.o.r1d!=null?`<span>Hoy ${pct(x.o.r1d)}</span>`:""}</div>
+  <ul>${x.r.map(t=>`<li${t.startsWith("⚠")?' style="color:#fcd34d"':""}>${esc(t)}</li>`).join("")}</ul>${x.cuando?`<div class="plan"><span><b>Cuándo:</b> ${esc(x.cuando)}</span></div>`:""}</div></article>`}
+
+/* precio de compra estimado: ultimo precio / (1 + retorno desde la compra) */
+function tablaCompra(s){const P=(s.pos||[]).filter(p=>p.abs!=null&&p.px!=null);if(!P.length)return"";
+  return`<div class="panel"><header><h2>A cuánto compraron cada una (estimado)</h2><span class="sub">Calculado con el último precio y el retorno desde la compra de TMSG</span></header>
+  <div class="tbox"><table><thead><tr><th>Acción</th><th class="n">Acciones</th><th class="n">Último precio</th><th class="n">Desde la compra</th><th class="n">Precio de compra ≈</th><th class="n">Costo total ≈ (US$)</th></tr></thead><tbody>
+  ${P.map(p=>{const f=1+p.abs/100,pc=p.px/f,co=p.gross/f;return`<tr><td class="tkc"><b>${esc(p.raw)}</b><span>${esc(p.des||"")}</span></td><td class="n">${p.sh!=null?fmt(p.sh,0):"–"}</td><td class="n">${fmt(p.px,2)}</td><td class="n">${pct(p.abs,2)}</td><td class="n"><b>${fmt(pc,2)}</b></td><td class="n">${usd(co)}</td></tr>`}).join("")}</tbody></table></div>
+  <span class="faint" style="font-size:12px">El precio va en la moneda de la acción (wones, dólares taiwaneses, etc.). Es aproximado: si compraron en varias veces es el promedio, y en acciones fuera de EE.UU. el retorno de TMSG puede incluir el cambio de moneda. El exacto está en TMSG (columna Entry Price / Avg Cost).</span></div>`}
 function renderPort(){const el=$("#tab-port");const s=PORT.snaps[PORT.snaps.length-1];
   const carga=`<div class="panel"><header><h2>${s?"Actualizar posiciones":"Cargar posiciones de TMSG"}</h2>${s?`<span class="sub">Última carga ${hace(s.fecha)} · ${PORT.snaps.length} cargas guardadas</span>`:""}</header>
     <p class="sub">En TMSG agrega la columna <b>Shares</b> (VIEWS → EDIT COLUMNS → SAVE VIEW), selecciona la tabla desde el título “Ticker”, copia y pega aquí.</p>
@@ -767,7 +793,7 @@ function renderPort(){const el=$("#tab-port");const s=PORT.snaps[PORT.snaps.leng
     <div class="kpi"><div class="l">Total del fondo</div><div class="v ${st.ret>=0?"up":"down"}">${sgn(st.ret,2)}</div></div>
     <div class="kpi"><div class="l">Contra el WLS</div><div class="v ${st.retRel>=0?"up":"down"}">${sgn(st.retRel,2)}</div><div class="s">esto define el ranking</div></div></div>
   <div class="panel"><header><h2>Qué hacer con cada posición</h2><span class="sub">Primero las que conviene vender</span></header>
-  <div class="grid g2">${dec.sort((a,b)=>(a.acc==="MANTENER")-(b.acc==="MANTENER")).map(tarjetaPos).join("")}</div></div>`+carga;
+  <div class="grid g2">${dec.sort((a,b)=>ORD_ACC(a.acc)-ORD_ACC(b.acc)).map(tarjetaPos).join("")}</div></div>`+tablaCompra(s)+carga;
   bindPort()}
 function bindPort(){const g=$("#pGuardar");if(g)g.onclick=()=>{const L=$("#pPaste").value.replace(/\r/g,"").split("\n").filter(l=>l.trim());if(!L.length){toast("Pega primero la tabla de TMSG");return}
     const sep=L[0].includes("\t")?"\t":L[0].includes(";")?";":",",pos=leerPosiciones(L.map(l=>l.split(sep).map(x=>x.trim())),false);
