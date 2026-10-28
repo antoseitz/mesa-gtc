@@ -476,6 +476,9 @@ function renderAcciones(){const el=$("#tab-acciones");
     if(q)return true;if(fA.vista==="comprar")return e.acc.startsWith("COMPRAR");if(fA.vista==="olas")return it.origen.some(x=>x.startsWith("ola"));if(fA.vista==="cartera")return e.cart;return true});
   L.sort((a,b)=>fA.orden==="sc"?b.sc-a.sc:(b.o[fA.orden]??-999)-(a.o[fA.orden]??-999));
   const uq=fA.q&&U?U.filas.filter(o=>!EV.has(o.t)&&(o.bbg+" "+(o.nombre||"")).toLowerCase().includes(fA.q)).slice(0,30):[];
+  if(fA.q&&!LISTA_WLS)cargarListaWLS();
+  const enU=new Set((U?.filas||[]).map(o=>claveTicker(o.bbg)));
+  const fq=fA.q&&LISTA_WLS?LISTA_WLS.filter(x=>!enU.has(claveTicker(x.bbg))&&(x.bbg+" "+x.nombre).toLowerCase().includes(fA.q)).slice(0,20):[];
   el.innerHTML=`<div class="panel"><header><h2>Acciones del WLS analizadas a fondo</h2><span class="sub">${EV.size} elegidas entre ${U?U.filas.length.toLocaleString("es-CL"):"–"} del WLS (Yahoo Finance): olas de hoy y de la semana, las mejores por factores y tu cartera.</span></header>
     <div class="row"><input id="aq" type="search" placeholder="Buscar ticker o nombre (también busca en todo el WLS)" value="${esc(fA.q)}" style="min-width:280px;flex:1">
     <div class="seg">${[["todas","Todas"],["comprar","Para comprar"],["olas","En ola"],["cartera","Mi cartera"]].map(([k,l])=>`<button data-av="${k}" aria-selected="${fA.vista===k}">${l}</button>`).join("")}</div>
@@ -487,11 +490,13 @@ function renderAcciones(){const el=$("#tab-acciones");
     <td>${it.origen.map(x=>`<span class="chip ${x.startsWith("ola")?"good":x==="cartera"?"info":""}">${({"ola-hoy":"ola hoy","ola-semana":"ola semana","factores":"factores","cartera":"cartera","reciente":"ola reciente","pedida":"pedida"}[x]||x)}</span>`).join(" ")}</td>
     <td>${inf.reco&&(inf.nAnalistas||0)>0?`${esc(recoTxt(inf))} <span class="faint">(${inf.nAnalistas})</span>${inf.upside!=null?` · ${pct(inf.upside,0)}`:""}`:'<span class="faint">–</span>'}</td>
     <td class="n">${pct(inf.ventas,0)} / ${pct(inf.utilidad,0)}</td><td><span class="chip ${e.tn.s>0?"good":e.tn.s<0?"bad":""}">${esc(e.tn.txt)}</span></td><td>${spark((it.hist||[]).slice(-63),110,30)}</td></tr>`}).join("")||`<tr><td colspan="12" class="faint" style="padding:18px">Ninguna coincide.</td></tr>`}</tbody></table></div>
-  ${uq.length?`<div class="panel"><header><h3>También en el WLS (sin análisis a fondo)</h3><span class="sub">No están entre las analizadas ahora. Haz clic para ver su ficha y, si quieres, pedir que se analice a fondo.</span></header><div class="tbox"><table><thead><tr><th>Acción</th><th>Bolsa</th><th class="n">Día</th><th class="n">Semana</th><th class="n">Mes</th><th class="n">US$M/día</th></tr></thead><tbody>${uq.map(o=>`<tr class="click" data-wls="${esc(o.t)}"><td class="tkc"><b>${esc(o.bbg)}</b><span>${esc(o.nombre||"")}</span></td><td>${chipBolsa(codBolsa(o.bbg))}</td><td class="n">${pct(o.r1d)}</td><td class="n">${pct(o.r1s)}</td><td class="n">${pct(o.r1m)}</td><td class="n">${fmt(o.liq,1)}</td></tr>`).join("")}</tbody></table></div></div>`:""}`;
+  ${uq.length?`<div class="panel"><header><h3>También en el WLS (sin análisis a fondo)</h3><span class="sub">No están entre las analizadas ahora. Haz clic para ver su ficha y, si quieres, pedir que se analice a fondo.</span></header><div class="tbox"><table><thead><tr><th>Acción</th><th>Bolsa</th><th class="n">Día</th><th class="n">Semana</th><th class="n">Mes</th><th class="n">US$M/día</th></tr></thead><tbody>${uq.map(o=>`<tr class="click" data-wls="${esc(o.t)}"><td class="tkc"><b>${esc(o.bbg)}</b><span>${esc(o.nombre||"")}</span></td><td>${chipBolsa(codBolsa(o.bbg))}</td><td class="n">${pct(o.r1d)}</td><td class="n">${pct(o.r1s)}</td><td class="n">${pct(o.r1m)}</td><td class="n">${fmt(o.liq,1)}</td></tr>`).join("")}</tbody></table></div></div>`:""}
+  ${fq.length?`<div class="panel"><header><h3>En el WLS, pero hoy sin datos de Yahoo</h3><span class="sub">Yahoo no las entregó en la última descarga (tiene límites). La página las vuelve a intentar cada hora. Haz clic para pedir que se prioricen.</span></header><div class="tbox"><table><tbody>${fq.map(x=>`<tr class="click" data-falta="${esc(x.bbg)}"><td class="tkc"><b>${esc(x.bbg)}</b><span>${esc(x.nombre)}</span></td><td class="faint">sin datos hoy</td></tr>`).join("")}</tbody></table></div></div>`:""}`;
   const q=$("#aq");q.oninput=e=>{fA.q=e.target.value.toLowerCase().trim();renderAcciones();const n=$("#aq");n.focus();n.setSelectionRange(n.value.length,n.value.length)};
   el.querySelectorAll("[data-av]").forEach(b=>b.onclick=()=>{fA.vista=b.dataset.av;renderAcciones()});
   $("#ao").onchange=e=>{fA.orden=e.target.value;renderAcciones()};
   el.querySelectorAll("[data-wls]").forEach(r=>r.onclick=()=>detalleTend(r.dataset.wls));
+  el.querySelectorAll("[data-falta]").forEach(r=>r.onclick=()=>detalleTend(r.dataset.falta));
   bindComunes(el)}
 function detalle(t){const e=EV.get(t);if(!e)return;const it=e.it,inf=it.info||{},o=e.o;
   const rel=(it.rel||[]).map(([k,c])=>{const x=EV.get(k);return`<span class="chip" title="Correlación de 90 días">${esc(x?x.it.bbg:k)} · ${fmt(c,2)}</span>`}).join(" ");
@@ -1125,13 +1130,15 @@ function diagnostico(L,buy){const resto=L.filter(e=>!e.acc.startsWith("COMPRAR")
 
 /* ficha corta para acciones en tendencia que no estan entre las analizadas */
 function detalleTend(t){const T=M?.tendencia||{};const o=U?.porT?.get(t)||null;
-  const x=Object.values(T).flat().find(y=>y.t===t)||(o?{t,nombre:o.nombre,r1d:o.r1d,volx:o.volx,enWLS:true,precio:o.precio,noticias:[]}:null);if(!x)return;
+  const fl=!o&&LISTA_WLS?LISTA_WLS.find(z=>z.bbg===t):null;
+  const x=Object.values(T).flat().find(y=>y.t===t)||(o?{t,nombre:o.nombre,r1d:o.r1d,volx:o.volx,enWLS:true,precio:o.precio,noticias:[]}:fl?{t,nombre:fl.nombre,enWLS:true,noticias:[],falta:true}:null);if(!x)return;
   const listas=Object.entries(T).filter(([k,l])=>l.some(y=>y.t===t)).map(([k])=>({trending:"en tendencia",suben:"de las que más suben",caen:"de las que más caen",activas:"de las más transadas"})[k]);
   const yaPedida=(load("gtc-pedidas")||{})[t];
   const lect=[];
   if(!x.enWLS)lect.push("No está en el WLS: no se puede comprar en el desafío. Sirve para ver qué tema está moviendo al mercado y buscar acciones del mismo sector que sí estén.");
   else{if((x.r1d??0)>=8)lect.push(`Ya subió ${sgn(x.r1d,1)} hoy: con los ~20 min de la orden probablemente llegan tarde. Si mañana sigue con volumen alto, puede ser ola de varios días.`);
     else if((x.r1d??0)<=-8)lect.push(`Cayó ${sgn(x.r1d,1)} hoy. Comprar después de una caída fuerte es apostar a un rebote: solo si la noticia no es grave.`);
+    else if(x.falta)lect.push("Está en el WLS, pero en la última descarga Yahoo no entregó sus precios (Yahoo limita cuántas se pueden bajar). La página la vuelve a intentar cada hora; si la piden, se descarga primero.");
     else lect.push("Está en el WLS y se puede comprar, pero sin análisis a fondo no tiene recomendación automática: pidan el análisis o revisen en Bloomberg (CN, ANR) antes de decidir.");
     if(o&&o.pxusd!=null&&o.pxusd<5)lect.push(`Precio US$${fmt(o.pxusd,2)}: la comisión por acción pesa ${fmt(2*COMISION/o.pxusd*100,1)}% ida y vuelta.`)}
   if((x.volx??0)>=2)lect.push(`Se está transando ${fmt(x.volx,1)}× su volumen normal: hay mucho interés, el movimiento tiene fuerza.`);
@@ -1156,6 +1163,13 @@ async function pedirAnalisis(t){const o=U?.porT?.get(t);const linea=`${t} | ${o?
     const r=await fetch(api,{method:"PUT",headers:h,body:JSON.stringify({message:"Pedir analisis: "+t,content:b64(new TextEncoder().encode(txt)),sha,...(EQ.rama?{branch:EQ.rama}:{})})});
     if(!r.ok){toast("No se pudo pedir ("+r.status+")");return}
     const P=load("gtc-pedidas")||{};P[t]=new Date().toISOString();store("gtc-pedidas",P);toast("Pedida: aparecerá analizada en la próxima actualización (≤ 1 h)");detalleTend(t)}catch(e){toast("Sin conexión con GitHub")}}
+
+/* lista completa del WLS (universo.txt del repositorio), para buscar las que Yahoo no entrego */
+let LISTA_WLS=null,_cargandoLista=false;
+function cargarListaWLS(){if(_cargandoLista)return;_cargandoLista=true;
+  fetch(`https://raw.githubusercontent.com/${REPO.o}/${REPO.r}/${EQ.rama||"main"}/universo.txt?v=${Date.now()}`,{cache:"no-store"}).then(r=>r.ok?r.text():"").then(t=>{
+    LISTA_WLS=t.split("\n").map(l=>l.split("#")[0].trim()).filter(Boolean).map(l=>{const[a,b]=l.split("|");return{bbg:a.trim().replace(/ equity$/i,""),nombre:(b||"").trim()}});
+    if(fA.q){const act=document.activeElement?.id==="aq";renderAcciones();if(act){const n=$("#aq");n.focus();n.setSelectionRange(n.value.length,n.value.length)}}}).catch(()=>{LISTA_WLS=[]})}
 /* ===================== GENERAL ===================== */
 function bindComunes(root){root.querySelectorAll("[data-armar]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();toggleArmar(b.dataset.armar)});
   root.querySelectorAll("[data-ver]").forEach(b=>b.onclick=ev=>{if(ev.target.closest("[data-armar]"))return;ev.stopPropagation();detalle(b.dataset.ver)});
