@@ -134,7 +134,7 @@ details>summary{cursor:pointer}
     <button class="tab" data-tab="bbg" aria-selected="false">⑥ Bloomberg 🔒</button>
     <button class="tab" data-tab="port" aria-selected="false">⑦ Mi cartera 🔒</button>
   </nav>
-  <section id="tab-mercado"></section>
+  <section id="tab-mercado"><div id="mTop" style="display:flex;flex-direction:column;gap:16px"></div><div id="vivoBox"></div><div id="mResto" style="display:flex;flex-direction:column;gap:16px"></div></section>
   <section id="tab-ahora" hidden></section>
   <section id="tab-acciones" hidden></section>
   <section id="tab-armar" hidden></section>
@@ -367,6 +367,8 @@ function evaluar(it){
   if(olaS){sc+=1.5;r.push(`Ola de la semana: ${sgn(o.r1s)} en 5 sesiones con ${fmt(o.volx5,1)}× su volumen normal`)}
   if(olaH){sc+=1.5;r.push(`Ola de hoy: ${sgn(o.r1d)} en su última sesión con ${fmt(o.volx,1)}× su volumen`)}
   if(dur){if(dur.dias){sc+=1;r.push(`Historial ${reg}: olas así siguieron subiendo ~${dur.dias} día${dur.dias>1?"s":""} (+${fmt(dur.exceso,2)}% sobre un día normal, en ${dur.n} olas del último año)`)}else{sc-=.5;al.push(`En ${reg} las olas no han seguido subiendo en el último año`)}}
+  if(it.origen.includes("reciente"))r.push(`Estuvo en ola el ${fecha(it.olaFecha)}: se sigue analizando 7 días por si la compraron o vuelve a moverse`);
+  if(it.pedida)r.push(`Pedida por ${it.pedida.quien?it.pedida.quien:"el equipo"} el ${fecha(it.pedida.fecha)} para análisis a fondo`);
   if(fact){sc+=1;r.push(`Entre las mejores del WLS por momentum, volatilidad y beta (tu modelo de factores)`)}
   if(o.r1m>0&&o.r1s>0){sc+=.5}
   const tn=tono(it.noticias);it.tono=tn;
@@ -471,7 +473,7 @@ function renderAhora(){const el=$("#tab-ahora");
 let fA={q:"",vista:"todas",orden:"sc"};
 function renderAcciones(){const el=$("#tab-acciones");
   const L=[...EV.values()].filter(e=>{const it=e.it,q=fA.q;if(q&&!(it.bbg+" "+(it.info?.nombre||it.nombre||"")+" "+it.t).toLowerCase().includes(q))return false;
-    if(fA.vista==="comprar")return e.acc.startsWith("COMPRAR");if(fA.vista==="olas")return it.origen.some(x=>x.startsWith("ola"));if(fA.vista==="cartera")return e.cart;return true});
+    if(q)return true;if(fA.vista==="comprar")return e.acc.startsWith("COMPRAR");if(fA.vista==="olas")return it.origen.some(x=>x.startsWith("ola"));if(fA.vista==="cartera")return e.cart;return true});
   L.sort((a,b)=>fA.orden==="sc"?b.sc-a.sc:(b.o[fA.orden]??-999)-(a.o[fA.orden]??-999));
   const uq=fA.q&&U?U.filas.filter(o=>!EV.has(o.t)&&(o.bbg+" "+(o.nombre||"")).toLowerCase().includes(fA.q)).slice(0,30):[];
   el.innerHTML=`<div class="panel"><header><h2>Acciones del WLS analizadas a fondo</h2><span class="sub">${EV.size} elegidas entre ${U?U.filas.length.toLocaleString("es-CL"):"–"} del WLS (Yahoo Finance): olas de hoy y de la semana, las mejores por factores y tu cartera.</span></header>
@@ -482,13 +484,14 @@ function renderAcciones(){const el=$("#tab-acciones");
   ${L.map(e=>{const it=e.it,inf=it.info||{};return`<tr class="click" data-ver="${esc(e.t)}"><td class="tkc"><b>${esc(it.bbg)}</b><span>${esc(inf.nombre||it.nombre||"")}</span></td>
     <td><span class="chip ${e.acc.startsWith("COMPRAR")?"good":e.acc==="ESPERAR"?"warn":""}">${esc(e.acc)}</span></td><td class="n">${fmt(e.sc,1)}</td><td>${chipBolsa(e.code)}</td>
     <td class="n">${pct(e.o.r1d)}</td><td class="n">${pct(e.o.r1s)}</td><td class="n">${pct(e.o.r1m)}</td>
-    <td>${it.origen.map(x=>`<span class="chip ${x.startsWith("ola")?"good":x==="cartera"?"info":""}">${{"ola-hoy":"ola hoy","ola-semana":"ola semana","factores":"factores","cartera":"cartera"}[x]}</span>`).join(" ")}</td>
+    <td>${it.origen.map(x=>`<span class="chip ${x.startsWith("ola")?"good":x==="cartera"?"info":""}">${({"ola-hoy":"ola hoy","ola-semana":"ola semana","factores":"factores","cartera":"cartera","reciente":"ola reciente","pedida":"pedida"}[x]||x)}</span>`).join(" ")}</td>
     <td>${inf.reco&&(inf.nAnalistas||0)>0?`${esc(recoTxt(inf))} <span class="faint">(${inf.nAnalistas})</span>${inf.upside!=null?` · ${pct(inf.upside,0)}`:""}`:'<span class="faint">–</span>'}</td>
     <td class="n">${pct(inf.ventas,0)} / ${pct(inf.utilidad,0)}</td><td><span class="chip ${e.tn.s>0?"good":e.tn.s<0?"bad":""}">${esc(e.tn.txt)}</span></td><td>${spark((it.hist||[]).slice(-63),110,30)}</td></tr>`}).join("")||`<tr><td colspan="12" class="faint" style="padding:18px">Ninguna coincide.</td></tr>`}</tbody></table></div>
-  ${uq.length?`<div class="panel"><header><h3>También en el WLS (sin análisis a fondo)</h3><span class="sub">Solo precio de Yahoo. Si te interesa una, agrégala al radar desde la página anterior o en equipo.txt.</span></header><div class="tbox"><table><thead><tr><th>Acción</th><th>Bolsa</th><th class="n">Día</th><th class="n">Semana</th><th class="n">Mes</th><th class="n">US$M/día</th></tr></thead><tbody>${uq.map(o=>`<tr><td class="tkc"><b>${esc(o.bbg)}</b><span>${esc(o.nombre||"")}</span></td><td>${chipBolsa(codBolsa(o.bbg))}</td><td class="n">${pct(o.r1d)}</td><td class="n">${pct(o.r1s)}</td><td class="n">${pct(o.r1m)}</td><td class="n">${fmt(o.liq,1)}</td></tr>`).join("")}</tbody></table></div></div>`:""}`;
+  ${uq.length?`<div class="panel"><header><h3>También en el WLS (sin análisis a fondo)</h3><span class="sub">No están entre las analizadas ahora. Haz clic para ver su ficha y, si quieres, pedir que se analice a fondo.</span></header><div class="tbox"><table><thead><tr><th>Acción</th><th>Bolsa</th><th class="n">Día</th><th class="n">Semana</th><th class="n">Mes</th><th class="n">US$M/día</th></tr></thead><tbody>${uq.map(o=>`<tr class="click" data-wls="${esc(o.t)}"><td class="tkc"><b>${esc(o.bbg)}</b><span>${esc(o.nombre||"")}</span></td><td>${chipBolsa(codBolsa(o.bbg))}</td><td class="n">${pct(o.r1d)}</td><td class="n">${pct(o.r1s)}</td><td class="n">${pct(o.r1m)}</td><td class="n">${fmt(o.liq,1)}</td></tr>`).join("")}</tbody></table></div></div>`:""}`;
   const q=$("#aq");q.oninput=e=>{fA.q=e.target.value.toLowerCase().trim();renderAcciones();const n=$("#aq");n.focus();n.setSelectionRange(n.value.length,n.value.length)};
   el.querySelectorAll("[data-av]").forEach(b=>b.onclick=()=>{fA.vista=b.dataset.av;renderAcciones()});
   $("#ao").onchange=e=>{fA.orden=e.target.value;renderAcciones()};
+  el.querySelectorAll("[data-wls]").forEach(r=>r.onclick=()=>detalleTend(r.dataset.wls));
   bindComunes(el)}
 function detalle(t){const e=EV.get(t);if(!e)return;const it=e.it,inf=it.info||{},o=e.o;
   const rel=(it.rel||[]).map(([k,c])=>{const x=EV.get(k);return`<span class="chip" title="Correlación de 90 días">${esc(x?x.it.bbg:k)} · ${fmt(c,2)}</span>`}).join(" ");
@@ -863,6 +866,37 @@ function corrSem(a,b,n=260){const A=serieH(a,n),B=serieH(b,n);if(!A||!B)return n
   for(let i=5;i<A.length;i+=5){const x=A[i]/A[i-5]-1,y=B[i]/B[i-5]-1;if(isFinite(x)&&isFinite(y)){ra.push(x);rb.push(y)}}
   if(ra.length<12)return null;const ma=ra.reduce((s,v)=>s+v,0)/ra.length,mb=rb.reduce((s,v)=>s+v,0)/rb.length;let c=0,va=0,vb=0;ra.forEach((x,i)=>{c+=(x-ma)*(rb[i]-mb);va+=(x-ma)**2;vb+=(rb[i]-mb)**2});return va&&vb?c/Math.sqrt(va*vb):null}
 
+
+/* ---------- VIX casi en vivo (grafico de TradingView, se monta una sola vez) ---------- */
+const TV_SIMB=[["TVC:VIX","VIX solo",null],["TVC:VIX","VIX vs S&P 500","SP:SPX"],["TVC:VIX","VIX vs Nasdaq 100","NASDAQ:NDX"],["TVC:DXY","Dólar DXY",null]];
+let tvSel=load("gtc-tv")??1;
+function montarVivo(){const box=$("#vivoBox");if(box.dataset.ok)return;box.dataset.ok="1";
+  box.innerHTML=`<div class="panel"><header><h2>⚡ VIX casi en vivo</h2><span class="sub">Gráfico de TradingView, velas de 5 minutos, hora Chile · puede tener algunos minutos de atraso</span></header>
+    <div class="row" style="justify-content:space-between"><div class="seg" id="tvSeg">${TV_SIMB.map((x,i)=>`<button data-tv="${i}" aria-selected="${i===tvSel}">${x[1]}</button>`).join("")}</div><a class="faint" style="font-size:12px" href="https://www.tradingview.com/symbols/TVC-VIX/" target="_blank" rel="noopener">Abrir en TradingView ↗</a></div>
+    <div id="vivoTxt"></div>
+    <div id="tvBox" style="height:440px;border:1px solid var(--line);border-radius:10px;overflow:hidden"></div>
+    <details class="note"><summary><b>Cómo usarlo antes de un anuncio (por ejemplo, la Fed)</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
+      <span><b>VIX subiendo antes del anuncio:</b> el mercado se está cubriendo, hay nervios. Es normal que suba un poco antes de la Fed; si sube fuerte (+5% o más) y el S&P cae, hay miedo real: no es momento de comprar acciones de beta alta.</span>
+      <span><b>VIX bajando antes o después del anuncio:</b> el mercado está tranquilo o el anuncio fue lo esperado. Después de la Fed, si el VIX cae fuerte y el S&P sube, suele ser buen ambiente para las olas de los días siguientes.</span>
+      <span><b>“VIX vs S&P 500”:</b> muestra las dos líneas juntas (cada una con su escala). Lo normal es que vayan al revés. Si ambas suben, el alza es frágil.</span>
+      <span><b>Ojo con el tiempo:</b> sus órdenes tardan ~20 min. Si el VIX se dispara de golpe, cuando la orden se ejecute el precio ya puede ser otro.</span></div></details></div>`;
+  box.querySelectorAll("[data-tv]").forEach(b=>b.onclick=()=>{tvSel=+b.dataset.tv;store("gtc-tv",tvSel);box.querySelectorAll("[data-tv]").forEach(x=>x.setAttribute("aria-selected",x===b));widgetTV()});
+  widgetTV()}
+function widgetTV(){const c=$("#tvBox");if(!c)return;const[s,,cmp]=TV_SIMB[tvSel]||TV_SIMB[1];
+  c.innerHTML='<div class="tradingview-widget-container" style="height:100%;width:100%"><div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div></div>';
+  const sc=document.createElement("script");sc.src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";sc.async=true;
+  sc.textContent=JSON.stringify({autosize:true,symbol:s,interval:"5",timezone:"America/Santiago",theme:"dark",style:cmp?"2":"1",locale:"es",backgroundColor:"rgba(13,22,38,1)",gridColor:"rgba(29,42,66,.6)",hide_side_toolbar:true,hide_volume:true,allow_symbol_change:true,withdateranges:true,range:"1D",support_host:"https://www.tradingview.com",...(cmp?{compareSymbols:[{symbol:cmp,position:"NewPriceScale"}]}:{})});
+  c.firstChild.appendChild(sc)}
+/* lectura del VIX de hoy con los datos de Yahoo (cada 15 min) */
+function lecturaVix(){const I=M?.intradia,v=I?.s?.["^VIX"],sp=I?.s?.["^GSPC"];if(!v)return"";const x=v.filter(a=>a!=null);if(x.length<3)return"";
+  const prev=I.prev?.["^VIX"]??x[0],u=x[x.length-1],d=(u/prev-1)*100,h1=x.length>12?(u/x[x.length-13]-1)*100:null,mn=Math.min(...x),mx=Math.max(...x);
+  const spx=sp?sp.filter(a=>a!=null):[],dsp=spx.length&&I.prev?.["^GSPC"]?(spx[spx.length-1]/I.prev["^GSPC"]-1)*100:null;
+  const fed=MACRO.find(e=>diasHasta(e.fecha)===0&&e.imp==="alta");
+  const dir=d>=3?"SUBIENDO fuerte":d>=0.5?"subiendo":d<=-3?"BAJANDO fuerte":d<=-0.5?"bajando":"estable";
+  const lect=[`Hoy el VIX está <b>${dir}</b>: ${fmt(u,2)} (${sgn(d,1)} vs el cierre de ayer${h1!=null?`; última hora ${sgn(h1,1)}`:""}). Rango del día: ${fmt(mn,2)}–${fmt(mx,2)}.`];
+  if(dsp!=null)lect.push(d>0.5&&dsp<0?"El S&P cae mientras el VIX sube: hay nervios, el mercado se está protegiendo.":d<-0.5&&dsp>0?"El S&P sube y el VIX baja: alza con confianza.":d>0.5&&dsp>0?"Suben los dos: el mercado sube pero se está cubriendo (alza frágil).":"Movimiento mixto, sin señal clara.");
+  if(fed)lect.push(`<b>Hoy: ${esc(fed.evento)} a las ${esc(fed.hora)} (hora Chile).</b> Miren el gráfico de arriba entre ${esc(fed.hora)} y una hora después: si el VIX cae, el mercado tomó bien el anuncio.`);
+  return`<div class="note" style="border-style:solid;border-color:#0c4a6e;color:#dbeafe;background:#04172b;font-size:13.5px">${lect.join(" ")} <span class="faint">(Lectura con datos de Yahoo, ${I.horas?.length?"último dato "+horaCL(I.horas[I.horas.length-1]):""}.)</span></div>`}
 /* ---------- por que se movio hoy (explicacion automatica) ---------- */
 function porQueHoy(){const s=MS();const nq=s.get("^IXIC"),sp=s.get("^GSPC");if(!nq||!sp)return null;
   const b=[];const verbo=v=>v>=0.05?"subió":v<=-0.05?"bajó":"quedó plano";
@@ -976,10 +1010,10 @@ function dependeDe(g){const k=(g.industria||"")+" "+(g.sector||"");const d=DEPEN
 const fmtCap=v=>v==null?"":v>=1e12?"US$"+fmt(v/1e12,1)+" billones":v>=1e9?"US$"+fmt(v/1e9,0)+" mil M":"";
 function grandesPorDia(dias){const o={};(M?.grandes||[]).forEach(g=>{if(g.earn&&dias.includes(g.earn))(o[g.earn]=o[g.earn]||[]).push(g)});Object.values(o).forEach(l=>l.sort((a,b)=>(b.mcap||0)-(a.mcap||0)));return o}
 
-function renderMercado(){const el=$("#tab-mercado");
-  if(!M){el.innerHTML=`<div class="empty"><h2>Cargando el panorama del mercado…</h2><p>Si no aparece, falta la primera actualización con el archivo nuevo (mercado.json): en GitHub, Actions → Run workflow.</p></div>`+calendarioAhora();bindMercado(el);return}
+function renderMercado(){const el=$("#tab-mercado"),top=$("#mTop"),resto=$("#mResto");montarVivo();
+  if(!M){top.innerHTML=`<div class="empty"><h2>Cargando el panorama del mercado…</h2><p>Si no aparece, falta la primera actualización con el archivo nuevo (mercado.json): en GitHub, Actions → Run workflow.</p></div>`;resto.innerHTML=calendarioAhora();bindMercado(el);return}
   const pq=porQueHoy();
-  el.innerHTML=`<div class="panel"><header><h2>¿Por qué se movió el mercado hoy?</h2><span class="sub">Explicación automática con precios de Yahoo (15–20 min de atraso) · actualizado ${hace(M.generado)}</span></header>
+  top.innerHTML=`<div class="panel"><header><h2>¿Por qué se movió el mercado hoy?</h2><span class="sub">Explicación automática con precios de Yahoo (15–20 min de atraso) · actualizado ${hace(M.generado)}</span></header>
     ${tilesMercado()}
     ${pq?`<div class="note" style="border-style:solid;border-color:#0c4a6e;color:#dbeafe;background:#04172b;font-size:13.5px"><ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">${pq.b.map(x=>`<li>${x}</li>`).join("")}</ul>
       ${pq.nt.length?`<div style="margin-top:10px"><b style="color:#7dd3fc">Titulares que lo explican:</b><ul style="margin:4px 0 0;padding-left:18px">${pq.nt.map(x=>`<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a> <span class="faint">· ${esc(x.fuente||"")} · ${hace(x.fecha)}</span></li>`).join("")}</ul></div>`:""}</div>`:""}
@@ -987,8 +1021,9 @@ function renderMercado(){const el=$("#tab-mercado");
     <details class="note"><summary><b>Cómo leerlo</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
       <span>Los cuadros de arriba muestran cuánto se movió cada mercado hoy y en el mes (verde = bueno para las acciones; en el VIX y las tasas, subir es malo, por eso se pinta rojo).</span>
       <span>La explicación se arma sola: mira qué gigantes y sectores se movieron más, si cambió el miedo (VIX), las tasas o el dólar, y busca titulares de las últimas horas. Es una guía: lean los titulares para entender el detalle.</span>
-      <span>El gráfico del día muestra el recorrido minuto a minuto. Si el Nasdaq sube y el VIX baja a la vez, el alza es “con confianza”; si ambos suben, hay nervios.</span></div></details></div>
-  ${calendarioAhora()}
+      <span>El gráfico del día muestra el recorrido minuto a minuto. Si el Nasdaq sube y el VIX baja a la vez, el alza es “con confianza”; si ambos suben, hay nervios.</span></div></details></div>`;
+  $("#vivoTxt").innerHTML=lecturaVix();
+  resto.innerHTML=`${calendarioAhora()}
   <div class="panel"><header><h2>Noticias importantes</h2><span class="sub">Mercado general, últimas 24 h (Google News y Yahoo Finance) · ${M.notHora?"actualizado "+hace(M.notHora):""}</span></header>${noticiasHTML()}</div>
   <div class="panel"><header><h2>Acciones en tendencia hoy</h2><span class="sub">Lo más buscado y movido en Yahoo Finance (EE.UU.) · ${M.tendHora?"actualizado "+hace(M.tendHora):""}</span></header>${tendenciaHTML()}
     <details class="note"><summary><b>Cómo usarlo</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
@@ -1089,17 +1124,20 @@ function diagnostico(L,buy){const resto=L.filter(e=>!e.acc.startsWith("COMPRAR")
 
 
 /* ficha corta para acciones en tendencia que no estan entre las analizadas */
-function detalleTend(t){const T=M?.tendencia||{};const x=Object.values(T).flat().find(y=>y.t===t);if(!x)return;
-  const o=U?.porT?.get(t)||null,listas=Object.entries(T).filter(([k,l])=>l.some(y=>y.t===t)).map(([k])=>({trending:"en tendencia",suben:"de las que más suben",caen:"de las que más caen",activas:"de las más transadas"})[k]);
+function detalleTend(t){const T=M?.tendencia||{};const o=U?.porT?.get(t)||null;
+  const x=Object.values(T).flat().find(y=>y.t===t)||(o?{t,nombre:o.nombre,r1d:o.r1d,volx:o.volx,enWLS:true,precio:o.precio,noticias:[]}:null);if(!x)return;
+  const listas=Object.entries(T).filter(([k,l])=>l.some(y=>y.t===t)).map(([k])=>({trending:"en tendencia",suben:"de las que más suben",caen:"de las que más caen",activas:"de las más transadas"})[k]);
+  const yaPedida=(load("gtc-pedidas")||{})[t];
   const lect=[];
   if(!x.enWLS)lect.push("No está en el WLS: no se puede comprar en el desafío. Sirve para ver qué tema está moviendo al mercado y buscar acciones del mismo sector que sí estén.");
   else{if((x.r1d??0)>=8)lect.push(`Ya subió ${sgn(x.r1d,1)} hoy: con los ~20 min de la orden probablemente llegan tarde. Si mañana sigue con volumen alto, puede ser ola de varios días.`);
     else if((x.r1d??0)<=-8)lect.push(`Cayó ${sgn(x.r1d,1)} hoy. Comprar después de una caída fuerte es apostar a un rebote: solo si la noticia no es grave.`);
-    else lect.push("Está en el WLS y se puede comprar. No está entre las ~90 analizadas a fondo, así que no tiene recomendación automática: revisen la noticia y en Bloomberg (CN, ANR) antes de decidir.");
+    else lect.push("Está en el WLS y se puede comprar, pero sin análisis a fondo no tiene recomendación automática: pidan el análisis o revisen en Bloomberg (CN, ANR) antes de decidir.");
     if(o&&o.pxusd!=null&&o.pxusd<5)lect.push(`Precio US$${fmt(o.pxusd,2)}: la comisión por acción pesa ${fmt(2*COMISION/o.pxusd*100,1)}% ida y vuelta.`)}
   if((x.volx??0)>=2)lect.push(`Se está transando ${fmt(x.volx,1)}× su volumen normal: hay mucho interés, el movimiento tiene fuerza.`);
   $("#drawer").innerHTML=`<div class="scrim" data-cerrar></div><aside class="drawer" role="dialog" aria-label="Detalle de ${esc(t)}"><button class="btn small x" data-cerrar>Cerrar ✕</button>
-    <div><div class="row"><h2 class="mono">${esc(o?.bbg||t)}</h2>${x.enWLS?'<span class="chip good">en el WLS</span>':'<span class="chip">no está en el WLS</span>'}</div><div class="sub">${esc(x.nombre||o?.nombre||"")} · ${listas.join(", ")} en Yahoo Finance hoy</div></div>
+    <div><div class="row"><h2 class="mono">${esc(o?.bbg||t)}</h2>${x.enWLS?'<span class="chip good">en el WLS</span>':'<span class="chip">no está en el WLS</span>'}</div><div class="sub">${esc(x.nombre||o?.nombre||"")}${listas.length?" · "+listas.join(", ")+" en Yahoo Finance hoy":o?" · "+esc(nomBolsa(codBolsa(o.bbg))):""}</div></div>
+    ${x.enWLS?`<div class="note" style="border-style:solid;border-color:#0c4a6e"><b>Esta acción no está entre las analizadas a fondo ahora</b> (las analizadas cambian cada hora según olas y factores). ${yaPedida?`<span class="chip good">Ya pedida ${hace(yaPedida)}: aparecerá en ③ en la próxima actualización (≤ 1 h)</span>`:`<div class="row" style="margin-top:6px"><button class="btn small primary" data-pedir="${esc(t)}">📌 Pedir análisis a fondo (7 días)</button><span class="faint" style="font-size:12px">Trae analistas, resultados, noticias, gráficos, plan de la ola y recomendación.</span></div>`}</div>`:""}
     <div class="kpis"><div class="kpi"><div class="l">Hoy</div><div class="v">${pct(x.r1d,1)}</div></div><div class="kpi"><div class="l">Volumen vs normal</div><div class="v">${x.volx!=null?fmt(x.volx,1)+"×":"–"}</div></div>
       ${o?`<div class="kpi"><div class="l">Semana</div><div class="v">${pct(o.r1s,1)}</div></div><div class="kpi"><div class="l">Mes</div><div class="v">${pct(o.r1m,1)}</div></div><div class="kpi"><div class="l">3 meses</div><div class="v">${pct(o.r3m,1)}</div></div>`:""}
       ${x.precio!=null?`<div class="kpi"><div class="l">Precio</div><div class="v">US$${fmt(x.precio,2)}</div></div>`:""}${x.mcap?`<div class="kpi"><div class="l">Tamaño</div><div class="v" style="font-size:16px">${fmtCap(x.mcap)||"–"}</div></div>`:""}</div>
@@ -1107,7 +1145,17 @@ function detalleTend(t){const T=M?.tendencia||{};const x=Object.values(T).flat()
     ${o?`<div class="panel"><h3>Riesgo</h3><div>Volatilidad 90 días: ${o.vol90!=null?fmt(o.vol90,0)+"%":"–"} · Beta: ${fmt(o.beta,2)} · correlación con el mercado: ${fmt(o.corr,2)}</div><div>Liquidez: US$${fmt(o.liq,1)} M/día · RSI ${fmt(o.rsi,0)} · a ${fmt(o.dist52,0)}% de su máximo de 52 semanas</div></div>`:""}
     <div class="panel"><h3>Noticias de las últimas 48 h</h3>${(x.noticias||[]).map(n=>`<div><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.titulo)}</a> <span class="faint">· ${esc(n.fuente||"")}${n.fecha?" · "+hace(n.fecha):""}</span></div>`).join("")||'<span class="faint">Sin titulares recientes. El movimiento puede venir de redes, de su sector o de un informe de analista.</span>'}
       <div><a href="https://finance.yahoo.com/quote/${encodeURIComponent(t)}" target="_blank" rel="noopener">Ver ${esc(t)} en Yahoo Finance ↗</a></div></div>
-  </aside>`;bindComunes($("#drawer"))}
+  </aside>`;bindComunes($("#drawer"));const pb=$("#drawer [data-pedir]");if(pb)pb.onclick=()=>pedirAnalisis(t)}
+async function pedirAnalisis(t){const o=U?.porT?.get(t);const linea=`${t} | ${o?.bbg||t} | ${new Date().toISOString().slice(0,10)} | ${(EQ.autor||"").replace(/[|#\n]/g," ")}`;
+  if(!EQ.token){$("#drawer aside").insertAdjacentHTML("beforeend",`<div class="panel" style="border-color:#78350f"><h3>Para pedirla necesitas el token del equipo</h3><p class="sub">El botón escribe en GitHub y solo funciona en el computador donde guardaste el token (pestaña ⑥ Bloomberg → Equipo → Activar publicación automática). Alternativa: en GitHub, abre el archivo <b>equipo.txt</b> del repositorio radar-gtc, haz clic en el lápiz ✏️, agrega al final una línea con <code>${esc(o?.bbg||t)}</code> y presiona Commit changes. Esa acción se analizará siempre.</p></div>`);return}
+  const api=`https://api.github.com/repos/${REPO.o}/${REPO.r}/contents/pedidas.txt`,h={Authorization:"Bearer "+EQ.token,Accept:"application/vnd.github+json"};
+  try{const g=await fetch(api+(EQ.rama?"?ref="+EQ.rama:""),{headers:h,cache:"no-store"});if(g.status===401||g.status===403){toast("GitHub rechazó el token");return}
+    let sha,txt="# Acciones pedidas desde la Mesa para analisis a fondo (7 dias): simbolo Yahoo | ticker BBG | fecha | quien\n";
+    if(g.ok){const j=await g.json();sha=j.sha;txt=new TextDecoder().decode(unb64(j.content.replace(/\s/g,"")))}
+    if(!txt.endsWith("\n"))txt+="\n";txt+=linea+"\n";
+    const r=await fetch(api,{method:"PUT",headers:h,body:JSON.stringify({message:"Pedir analisis: "+t,content:b64(new TextEncoder().encode(txt)),sha,...(EQ.rama?{branch:EQ.rama}:{})})});
+    if(!r.ok){toast("No se pudo pedir ("+r.status+")");return}
+    const P=load("gtc-pedidas")||{};P[t]=new Date().toISOString();store("gtc-pedidas",P);toast("Pedida: aparecerá analizada en la próxima actualización (≤ 1 h)");detalleTend(t)}catch(e){toast("Sin conexión con GitHub")}}
 /* ===================== GENERAL ===================== */
 function bindComunes(root){root.querySelectorAll("[data-armar]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();toggleArmar(b.dataset.armar)});
   root.querySelectorAll("[data-ver]").forEach(b=>b.onclick=ev=>{if(ev.target.closest("[data-armar]"))return;ev.stopPropagation();detalle(b.dataset.ver)});
@@ -1120,7 +1168,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab)
 document.addEventListener("keydown",e=>{if(e.key==="Escape")$("#drawer").innerHTML=""});
 const t0=load("gtc-mesa-tab");if(t0&&$("#tab-"+t0))setTab(t0);
 renderTodo();cargarTodo().then(()=>sincronizarEquipo(false));
-setInterval(()=>{if(!document.hidden)cargarTodo()},10*60*1000);
+setInterval(()=>{if(!document.hidden)cargarTodo()},5*60*1000);
 setInterval(()=>{if(!document.hidden){renderStatus();cinta()}},60*1000);
 setInterval(()=>{if(!document.hidden)sincronizarEquipo(false)},5*60*1000);
 })();
