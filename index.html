@@ -806,13 +806,15 @@ function renderPort(){const el=$("#tab-port");const s=PORT.snaps[PORT.snaps.leng
     <div class="kpi"><div class="l">Hoy vs WLS</div><div class="v ${(st.rpnl||0)>=0?"up":"down"}">${st.rpnl==null?"–":usd(st.rpnl)}</div></div>
     <div class="kpi"><div class="l">Total del fondo</div><div class="v ${st.ret>=0?"up":"down"}">${sgn(st.ret,2)}</div></div>
     <div class="kpi"><div class="l">Contra el WLS</div><div class="v ${st.retRel>=0?"up":"down"}">${sgn(st.retRel,2)}</div><div class="s">esto define el ranking</div></div></div>
+  ${carteraVivoHTML(true)}
   <div class="panel"><header><h2>Qué hacer con cada posición</h2><span class="sub">Primero las que conviene vender</span></header>
   <div class="grid g2">${dec.sort((a,b)=>ORD_ACC(a.acc)-ORD_ACC(b.acc)).map(tarjetaPos).join("")}</div></div>`+tablaCompra(s)+carga;
-  bindPort()}
+  bindPort();bindVivo(el)}
 function bindPort(){const g=$("#pGuardar");if(g)g.onclick=()=>{const L=$("#pPaste").value.replace(/\r/g,"").split("\n").filter(l=>l.trim());if(!L.length){toast("Pega primero la tabla de TMSG");return}
     const sep=L[0].includes("\t")?"\t":L[0].includes(";")?";":",",pos=leerPosiciones(L.map(l=>l.split(sep).map(x=>x.trim())),false);
     if(!pos.length){toast("No encontré posiciones: incluye la fila de títulos");return}
-    PORT.snaps.push({fecha:new Date().toISOString(),origen:"Pegado",pos});PORT.snaps=PORT.snaps.slice(-300);store("gtc-port",PORT);marcarCambio();renderTodo();toast(`${pos.length} posiciones guardadas`)};
+    PORT.snaps.push({fecha:new Date().toISOString(),origen:"Pegado",pos});PORT.snaps=PORT.snaps.slice(-300);store("gtc-port",PORT);marcarCambio();renderTodo();toast(`${pos.length} posiciones guardadas`);
+    if(EQ.token)publicarCarteraTxt(pos).then(ok=>{if(ok)setTimeout(()=>toast("Tickers de la cartera anotados en GitHub: sus precios cada 5 min llegan en ≤ 15 min"),2500)})};
   const b=$("#pBorrar");if(b)b.onclick=()=>{if(!confirm("¿Borrar la última carga?"))return;PORT.snaps.pop();store("gtc-port",PORT);marcarCambio();renderTodo()}}
 
 /* ===================== BLOOMBERG ===================== */
@@ -1062,7 +1064,7 @@ function grandesPorDia(dias){const o={};(M?.grandes||[]).forEach(g=>{if(g.earn&&
 function renderMercado(){const el=$("#tab-mercado"),top=$("#mTop"),resto=$("#mResto");montarVivo();
   if(!M){top.innerHTML=`<div class="empty"><h2>Cargando el panorama del mercado…</h2><p>Si no aparece, falta la primera actualización con el archivo nuevo (mercado.json): en GitHub, Actions → Run workflow.</p></div>`;resto.innerHTML=calendarioAhora();bindMercado(el);return}
   const pq=porQueHoy();
-  top.innerHTML=`<div class="panel"><header><h2>¿Por qué se movió el mercado hoy?</h2><span class="sub">Explicación automática con precios de Yahoo (15–20 min de atraso) · actualizado ${hace(M.generado)}</span></header>
+  top.innerHTML=(PORT.snaps.length?carteraVivoHTML(false):"")+`<div class="panel"><header><h2>¿Por qué se movió el mercado hoy?</h2><span class="sub">Explicación automática con precios de Yahoo (15–20 min de atraso) · actualizado ${hace(M.generado)}</span></header>
     ${tilesMercado()}
     ${pq?`<div class="note" style="border-style:solid;border-color:#0c4a6e;color:#dbeafe;background:#04172b;font-size:13.5px"><ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">${pq.b.map(x=>`<li>${x}</li>`).join("")}</ul>
       ${pq.nt.length?`<div style="margin-top:10px"><b style="color:#7dd3fc">Titulares que lo explican:</b><ul style="margin:4px 0 0;padding-left:18px">${pq.nt.map(x=>`<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo)}</a> <span class="faint">· ${esc(x.fuente||"")} · ${hace(x.fecha)}</span></li>`).join("")}</ul></div>`:""}</div>`:""}
@@ -1071,7 +1073,7 @@ function renderMercado(){const el=$("#tab-mercado"),top=$("#mTop"),resto=$("#mRe
       <span>Los cuadros de arriba muestran cuánto se movió cada mercado hoy y en el mes (verde = bueno para las acciones; en el VIX y las tasas, subir es malo, por eso se pinta rojo).</span>
       <span>La explicación se arma sola: mira qué gigantes y sectores se movieron más, si cambió el miedo (VIX), las tasas o el dólar, y busca titulares de las últimas horas. Es una guía: lean los titulares para entender el detalle.</span>
       <span>El gráfico del día muestra el recorrido minuto a minuto. Si el Nasdaq sube y el VIX baja a la vez, el alza es “con confianza”; si ambos suben, hay nervios.</span></div></details></div>`;
-  $("#vivoTxt").innerHTML=lecturaVix();
+  $("#vivoTxt").innerHTML=lecturaVix();bindComunes(top);
   resto.innerHTML=`${calendarioAhora()}
   <div class="panel"><header><h2>Noticias importantes</h2><span class="sub">Mercado general, últimas 24 h (Google News y Yahoo Finance) · ${M.notHora?"actualizado "+hace(M.notHora):""}</span></header>${noticiasHTML()}</div>
   <div class="panel"><header><h2>Acciones en tendencia hoy</h2><span class="sub">Lo más buscado y movido en Yahoo Finance (EE.UU.) · ${M.tendHora?"actualizado "+hace(M.tendHora):""}</span></header>${tendenciaHTML()}
@@ -1232,6 +1234,53 @@ function historialHTML(){const H=C?.historial;if(!H)return"";const F=Object.entr
   <div class="kpis" style="margin-top:10px">${rp?`<div class="kpi"><div class="l">Posibles olas marcadas</div><div class="v">${rp.n}</div><div class="s">${rp.pos} subieron desde la señal · promedio ${sgn(rp.med,1)} · ${rp.ola} se convirtieron en ola</div></div>`:""}${ro?`<div class="kpi"><div class="l">Olas marcadas</div><div class="v">${ro.n}</div><div class="s">${ro.pos} siguieron subiendo · promedio ${sgn(ro.med,1)}</div></div>`:""}</div>
   <div class="tbox" style="max-height:420px"><table><thead><tr><th>Acción</th><th>Señal</th><th>Cuándo apareció</th><th class="n">Precio entonces</th><th class="n">Hoy</th><th class="n">Desde la señal</th><th>¿Se hizo ola?</th></tr></thead><tbody>${ord.map(f=>`<tr class="click" data-ver="${esc(f.t)}"><td class="tkc"><b>${esc(f.bbg)}</b><span>${esc(f.nom)}</span></td><td>${f.tipo==="pre-ola"?'<span class="chip" style="color:#d8b4fe;border-color:#4c1d95;background:#1e1236">posible ola</span>':'<span class="chip good">ola</span>'}</td><td>${fechaCL(f.f)} <span class="faint">${hace(f.f)}</span></td><td class="n">${fmt(f.px,f.px>=1000?0:2)}</td><td class="n">${fmt(f.pxHoy,f.pxHoy>=1000?0:2)}</td><td class="n">${pct(f.ret,1)}</td><td>${f.tipo==="pre-ola"?(f.fOla?`sí, el ${fechaCL(f.fOla)}`:'<span class="faint">todavía no</span>'):"–"}</td></tr>`).join("")}</tbody></table></div>
   <span class="faint" style="font-size:12px">Sirve para saber cuánto confiar en cada tipo de señal. Si las “posibles olas” no están funcionando estas semanas, conviene darles menos peso.</span></details>`}
+
+/* ===================== CÓMO VA LO QUE TENEMOS (casi en vivo) ===================== */
+async function ghPut(ruta,txt,msg){if(!EQ.token)return false;const api=`https://api.github.com/repos/${REPO.o}/${REPO.r}/contents/${ruta}`,h={Authorization:"Bearer "+EQ.token,Accept:"application/vnd.github+json"};
+  try{const g=await fetch(api+(EQ.rama?"?ref="+EQ.rama:""),{headers:h,cache:"no-store"});if(g.status===401||g.status===403)return false;const sha=g.ok?(await g.json()).sha:undefined;
+    const r=await fetch(api,{method:"PUT",headers:h,body:JSON.stringify({message:msg,content:b64(new TextEncoder().encode(txt)),sha,...(EQ.rama?{branch:EQ.rama}:{})})});return r.ok}catch(e){return false}}
+function publicarCarteraTxt(pos){const tks=[...new Set(pos.map(p=>p.raw.replace(/ equity$/i,"").trim()))];
+  return ghPut("cartera.txt","# Lo que tiene comprado el equipo (lo escribe la Mesa al guardar posiciones). Solo tickers: sirve para seguir sus precios cada 15 min.\n"+tks.join("\n")+"\n","Cartera actual ("+tks.length+" acciones)")}
+function datosVivo(p){const k=claveTicker(p.raw||p.k),o=U?.porB?.get(k);const C_=M?.cartera||{};
+  let d=o&&C_[o.t];if(!d)d=Object.values(C_).find(x=>claveTicker(x.bbg||"")===k);if(!d||!d.v?.length)return null;
+  const v=d.v.filter(x=>x!=null),u=v[v.length-1],prev=d.prev??v[0];return{...d,u,prev,dHoy:prev?(u/prev-1)*100:null,ultima:d.h[d.h.length-1]}}
+function miniVivo(d,w=260,hh=70){const v=d.v,b=d.prev??v.find(x=>x!=null);const x=v.filter(a=>a!=null);if(x.length<2)return"";const mn=Math.min(b,...x),mx=Math.max(b,...x),r=(mx-mn)||1;
+  const Y=y=>(hh-4-(y-mn)/r*(hh-8)).toFixed(1);const pts=v.map((y,i)=>y==null?null:`${(i/(v.length-1)*w).toFixed(1)},${Y(y)}`).filter(Boolean).join(" ");const col=x[x.length-1]>=b?"#22c55e":"#ef4444";
+  return`<svg viewBox="0 0 ${w} ${hh}" style="width:100%;height:${hh}px" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="${w}" y1="${Y(b)}" y2="${Y(b)}" stroke="#3b4d6b" stroke-dasharray="3 3"/><polyline fill="none" stroke="${col}" stroke-width="1.8" points="${pts}"/></svg>`}
+let tvCart=false;
+function tvSimbolo(raw){const p=raw.replace(/ equity$/i,"").trim().split(/\s+/),t=p[0],ex=(p[1]||"US").toUpperCase();
+  if(["US","UN","UW","UQ","UA","UR","UP","UV"].includes(ex))return t;if(ex==="KS"||ex==="KQ")return"KRX:"+t;if(ex==="TT")return"TWSE:"+t;if(ex==="JP"||ex==="JT")return"TSE:"+t;if(ex==="HK")return"HKEX:"+t;if(ex==="LN")return"LSE:"+t;return null}
+function carteraVivoHTML(conTV=true){const s=PORT.snaps[PORT.snaps.length-1];if(!s)return"";
+  const F=s.pos.map(p=>{const d=datosVivo(p);let f=p.px&&d?d.u/p.px:1;if(!(f>0.6&&f<1.6))f=1; // si no calza (otra moneda o dato malo), no se ajustaconst valor=p.gross*f,desde=p.abs!=null?((1+p.abs/100)*f-1)*100:null;
+    return{p,d,valor,desde,pnlHoy:d&&d.dHoy!=null?valor*d.dHoy/(100+d.dHoy):null,code:codBolsa(p.raw.includes(" ")?p.raw:p.raw+" US")}});
+  const con=F.filter(x=>x.d),tot=F.reduce((a,x)=>a+x.valor,0),hoy=con.reduce((a,x)=>a+(x.pnlHoy||0),0),costo=F.reduce((a,x)=>a+(x.p.abs!=null?x.p.gross/(1+x.p.abs/100):x.p.gross),0);
+  const acwi=M?(MS().get("ACWI")):null,hoyPct=tot?100*hoy/tot:null;
+  if(!M?.cartera)return`<div class="panel"><header><h2>📡 Cómo va lo que tenemos</h2></header><p class="sub">Falta la primera actualización con los precios cada 5 min de la cartera (llegan en ≤ 15 min después de subir el radar nuevo).</p></div>`;
+  const cards=F.sort((a,b)=>(b.d?1:0)-(a.d?1:0)||(b.valor-a.valor)).map(x=>{const d=x.d,ab=BOLSAS[x.code]&&estadoBolsa(x.code).fase==="abierta";
+    return`<div class="card" ${EV.has(U?.porB?.get(claveTicker(x.p.raw))?.t)?`data-ver="${esc(U.porB.get(claveTicker(x.p.raw)).t)}" style="cursor:pointer"`:""}>
+      <div class="row" style="justify-content:space-between"><div><b class="mono">${esc(x.p.raw)}</b> <span class="faint" style="font-size:12px">${esc(x.p.des||"")}</span></div>${BOLSAS[x.code]?chipBolsa(x.code):""}</div>
+      ${d?`<div class="row" style="justify-content:space-between;align-items:baseline"><span class="mono" style="font-size:20px;font-weight:600" title="Último precio (moneda local)">${fmt(d.u,d.u>=1000?0:2)}</span><span class="mono" style="font-size:16px">${pct(d.dHoy,2)} <span class="faint" style="font-size:11px">${ab?"hoy":"última sesión"}</span></span></div>
+        ${miniVivo(d)}
+        <div class="row mono" style="justify-content:space-between;font-size:12px"><span>${x.pnlHoy!=null?`<span class="${x.pnlHoy>=0?"up":"down"}">${x.pnlHoy>=0?"+":"−"}${usd(Math.abs(x.pnlHoy)).replace("−","")}</span> ${ab?"hoy":"en la sesión"}`:""}</span><span>desde la compra ${pct(x.desde,1)}</span></div>
+        <span class="faint" style="font-size:11px">${ab?"en vivo con ~15–20 min de atraso":"cerrada"} · último dato ${horaCL(d.ultima)} (Chile)${d.dia?" · sesión del "+fecha(d.dia):""}</span>`:'<span class="faint" style="font-size:12px">Sin precios de Yahoo cada 5 min para esta acción todavía.</span>'}</div>`}).join("");
+  return`<div class="panel" id="panelVivo"><header><h2>📡 Cómo va lo que tenemos</h2><span class="sub">Precios cada 5 min (Yahoo, se actualizan cada 15 min) sobre las posiciones cargadas el ${fecha(s.fecha)}</span></header>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Valor estimado ahora</div><div class="v">${usd(tot)}</div><div class="s">${con.length} de ${F.length} con precio reciente</div></div>
+      <div class="kpi"><div class="l">Hoy (última sesión de cada bolsa)</div><div class="v ${hoy>=0?"up":"down"}">${hoy>=0?"+":"−"}${usd(Math.abs(hoy)).replace("−","")}</div><div class="s">${sgn(hoyPct,2)} de la cartera${acwi?` · Mundo (≈ WLS) ${sgn(acwi.r1d,2)}`:""}</div></div>
+      <div class="kpi"><div class="l">Desde la compra (estimado)</div><div class="v ${tot>=costo?"up":"down"}">${sgn(100*(tot/costo-1),2)}</div><div class="s">${tot>=costo?"+":"−"}${usd(Math.abs(tot-costo)).replace("−","")} sobre ${usd(costo)} invertidos</div></div>
+    </div>
+    <div class="row" style="justify-content:space-between"><span class="sub">Verde = sube vs el cierre anterior (línea punteada) · rojo = baja. Clic en una tarjeta para ver su ficha.</span>${conTV?`<button class="btn small ${tvCart?"on":""}" id="tvCartBtn">${tvCart?"✓ ":""}⚡ Ver en vivo (TradingView)</button>`:'<span class="faint" style="font-size:12px">Gráficos de TradingView en vivo: en ⑦ Mi cartera</span>'}</div>
+    ${tvCart&&conTV?`<div class="grid g3" id="tvCartGrid">${F.map(x=>{const sy=tvSimbolo(x.p.raw);return sy?`<div class="card" style="padding:4px;height:230px" data-tvs="${esc(sy)}"></div>`:`<div class="card"><b class="mono">${esc(x.p.raw)}</b><span class="faint" style="font-size:12px">TradingView no tiene esta bolsa para gráficos insertados.</span></div>`}).join("")}</div>
+      <span class="faint" style="font-size:12px">TradingView: casi en tiempo real en EE.UU.; en Corea y Taiwán puede no estar disponible (en ese caso usen las tarjetas de Yahoo).</span>`:`<div class="grid g3">${cards}</div>`}
+    <details class="note"><summary><b>Cómo se calcula</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">
+      <span><b>Hoy:</b> cuánto se movió cada acción contra su cierre anterior, multiplicado por lo que tienen invertido. En bolsas cerradas (por ejemplo Corea de noche) muestra su última sesión.</span>
+      <span><b>Desde la compra:</b> parte del retorno de TMSG en la última carga y le suma lo que se movió el precio desde entonces. Es estimado: no incluye el cambio de moneda de hoy ni compras/ventas posteriores. Carguen TMSG de nuevo para el número exacto.</span>
+      <span><b>Para que siga las acciones correctas</b>, al guardar posiciones en ⑦ con el token del equipo la página anota sus tickers en GitHub (archivo cartera.txt, solo los tickers, sin montos).</span></div></details></div>`}
+function bindVivo(root){const b=root.querySelector("#tvCartBtn");if(b)b.onclick=()=>{tvCart=!tvCart;renderMercado();renderPort()};
+  root.querySelectorAll("[data-tvs]").forEach(c=>{if(c.dataset.ok)return;c.dataset.ok="1";c.innerHTML='<div class="tradingview-widget-container" style="height:100%"><div class="tradingview-widget-container__widget" style="height:100%"></div></div>';
+    const sc=document.createElement("script");sc.src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";sc.async=true;
+    sc.textContent=JSON.stringify({symbol:c.dataset.tvs,width:"100%",height:"100%",locale:"es",dateRange:"1D",colorTheme:"dark",isTransparent:true,autosize:true,largeChartUrl:""});c.firstChild.appendChild(sc)})}
+
 /* ===================== GENERAL ===================== */
 function bindComunes(root){root.querySelectorAll("[data-armar]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();toggleArmar(b.dataset.armar)});
   root.querySelectorAll("[data-ver]").forEach(b=>b.onclick=ev=>{if(ev.target.closest("[data-armar]"))return;ev.stopPropagation();detalle(b.dataset.ver)});
