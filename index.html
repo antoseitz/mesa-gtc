@@ -76,6 +76,7 @@ h3{margin:0;font-size:15px}
 .a-wait{background:#2d1a04;color:#fcd34d;border-bottom:1px solid #78350f}
 .a-sell{background:#330a0a;color:#fca5a5;border-bottom:1px solid #7f1d1d}
 .a-hold{background:#141f33;color:#c7d2fe;border-bottom:1px solid var(--line2)}
+.a-ant{background:#1e1236;color:#d8b4fe;border-bottom:1px solid #4c1d95}
 .dec .body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
 .dec .tk{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .dec .tk b{font-family:var(--mono);font-size:17px}
@@ -367,6 +368,7 @@ function evaluar(it){
   if(olaS){sc+=1.5;r.push(`Ola de la semana: ${sgn(o.r1s)} en 5 sesiones con ${fmt(o.volx5,1)}× su volumen normal`)}
   if(olaH){sc+=1.5;r.push(`Ola de hoy: ${sgn(o.r1d)} en su última sesión con ${fmt(o.volx,1)}× su volumen`)}
   if(dur){if(dur.dias){sc+=1;r.push(`Historial ${reg}: olas así siguieron subiendo ~${dur.dias} día${dur.dias>1?"s":""} (+${fmt(dur.exceso,2)}% sobre un día normal, en ${dur.n} olas del último año)`)}else{sc-=.5;al.push(`En ${reg} las olas no han seguido subiendo en el último año`)}}
+  if(it.preola){sc+=1;r.push(`Posible próxima ola (todavía no sube): ${it.preola.senales.slice(0,3).join("; ")}`)}
   if(it.origen.includes("reciente"))r.push(`Estuvo en ola el ${fecha(it.olaFecha)}: se sigue analizando 7 días por si la compraron o vuelve a moverse`);
   if(it.pedida)r.push(`Pedida por ${it.pedida.quien?it.pedida.quien:"el equipo"} el ${fecha(it.pedida.fecha)} para análisis a fondo`);
   if(fact){sc+=1;r.push(`Entre las mejores del WLS por momentum, volatilidad y beta (tu modelo de factores)`)}
@@ -392,18 +394,22 @@ function evaluar(it){
   else if(gap!=null&&gap<=-2)al.push(`Se espera que abra ${sgn(gap)} (su mercado cayó en EE.UU.): entraría más barata, pero confirmen que la ola sigue`);
   let acc,cls,frase,cuando;
   const dias=dur&&dur.dias?dur.dias:null;
-  if(sc>=4){
+  if(it.preola&&!olaH&&!olaS&&sc>=2.5&&(o.r1d??0)<3){acc="ANTICIPAR";cls="a-ant";
+    frase=`Posible próxima ola: todavía no sube, pero tiene las señales que suelen venir antes. Entrar con una posición chica y aumentar solo si confirma (sube ≥ 3% con volumen alto).`;
+    cuando=e.fase==="abierta"&&minCierre(code)>=35?`Su bolsa está abierta: orden antes de las ${cierreM} (Chile)`:`La orden se ejecuta al abrir (${pa?pa.txt+" hora Chile":"próxima sesión"})`}
+  else if(sc>=4){
     if(e.fase==="abierta"&&(o.r1d??0)>=6){acc="ESPERAR";cls="a-wait";frase=`Esperar: ya subió ${sgn(o.r1d)} hoy. Con ~20 min de desfase llegarías tarde; mejor en la próxima apertura si sigue fuerte.`;cuando="Revisar mañana antes de que abra"}
     else if(e.fase==="abierta"&&minCierre(code)!=null&&minCierre(code)<35){acc="COMPRAR AL ABRIR";cls="a-open";frase=`Recomiendo comprar en la próxima apertura${dias?` para aprovechar la ola de ~${dias} día${dias>1?"s":""}`:""}: su bolsa cierra en ${minCierre(code)} min y la orden (~20 min) no alcanza.`;cuando=`Dejar la orden para la próxima apertura`}
     else if(e.fase==="abierta"){acc="COMPRAR AHORA";cls="a-buy";frase=`Recomiendo comprar ahora${dias?` para aprovechar la ola de ~${dias} día${dias>1?"s":""}`:""}: su bolsa está abierta hasta las ${cierre} (Chile).`;cuando=`Dar la orden antes de las ${cierreM} (Chile)`}
     else{acc="COMPRAR AL ABRIR";cls="a-open";frase=`Recomiendo dejar la compra para la apertura${dias?` y aprovechar la ola de ~${dias} día${dias>1?"s":""}`:""}: su bolsa (${nomBolsa(code)}) está cerrada y abre ${pa?pa.txt+" hora Chile":"en la próxima sesión"}.`;
       cuando=`La orden se ejecuta al abrir (${pa?pa.txt:"próxima sesión"})${gap!=null&&Math.abs(gap)>=1.5?` · se espera que abra ${sgn(gap)} (${gap>0?"más cara":"más barata"})`:""}`}
-  }else if(sc>=2.5){acc="VIGILAR";cls="a-hold";frase=`Vigilar: tiene señales a favor pero no suficientes para comprar todavía.`;cuando="Revisar en la próxima actualización"}
+  }
+  else if(sc>=2.5){acc="VIGILAR";cls="a-hold";frase=`Vigilar: tiene señales a favor pero no suficientes para comprar todavía.`;cuando="Revisar en la próxima actualización"}
   else{acc="NO POR AHORA";cls="a-hold";frase="Sin señales suficientes para comprar.";cuando=""}
-  const monto=sc>=6?150000:sc>=4?100000:50000;
+  const monto=acc==="ANTICIPAR"?(sc>=5?100000:50000):sc>=6?150000:sc>=4?100000:50000;
   const ev={t:it.t,it,o,code,reg,sc:Math.round(sc*10)/10,acc,cls,frase,cuando,monto,razones:r,alertas:al,dias,dur,gap,tn,red,cart,fase:e.fase};
   ev.plan=planOla(ev);
-  ev.venta=ev.plan?`Vender el ${fechaHoraCL(ev.plan.hVenta)} (hora Chile, 30 min antes del cierre de ${nomBolsa(code)}), sesión ${ev.plan.N} desde la compra, o antes si cae −5%`:`Sin plazo de ola: mantener mientras siga el momentum; vender si cae −7% desde la compra`;
+  ev.venta=acc==="ANTICIPAR"?`Si en 3 sesiones no se mueve, venderla y rotar; si cae −5% desde la compra, vender. Si confirma la ola, aumentar y seguir el plan de la ola`:ev.plan?`Vender el ${fechaHoraCL(ev.plan.hVenta)} (hora Chile, 30 min antes del cierre de ${nomBolsa(code)}), sesión ${ev.plan.N} desde la compra, o antes si cae −5%`:`Sin plazo de ola: mantener mientras siga el momentum; vender si cae −7% desde la compra`;
   if(ev.plan&&ev.plan.N<ev.plan.base)ev.alertas.push(ev.plan.notas[ev.plan.notas.length-1]);
   return ev}
 function evaluarTodo(){EV=new Map();CANDS().forEach(it=>EV.set(it.t,evaluar(it)))}
@@ -436,7 +442,7 @@ function tarjeta(ev,compacta){const it=ev.it,inf=it.info||{},o=ev.o,enA=ARM.item
     <div class="row" style="justify-content:space-between"><div class="row mono" style="gap:14px;font-size:12.5px"><span>Día ${pct(o.r1d)}</span><span>Semana ${pct(o.r1s)}</span><span>Mes ${pct(o.r1m)}</span></div>${spark((it.hist||[]).slice(-60))}</div>
     <div class="frase">${esc(ev.frase)}</div>
     ${compacta?"":`<div><span class="faint" style="font-size:12px">POR QUÉ</span><ul>${ev.razones.slice(0,5).map(x=>`<li>${esc(x)}</li>`).join("")||"<li>Sin razones fuertes</li>"}${ev.alertas.map(x=>`<li style="color:#fcd34d">⚠ ${esc(x)}</li>`).join("")}</ul></div>`}
-    ${ev.acc.startsWith("COMPRAR")?`<div class="plan"><span><b>Cuándo:</b> ${esc(ev.cuando)}</span><span><b>Cuánto:</b> ${usd(ev.monto)} (máximo ${usd(MAXPOS)} por acción)</span><span><b>Salida:</b> ${esc(ev.venta)}</span>${ev.plan?`<span class="faint" style="font-size:12px">${ev.plan.mac.length?`⚠ En el plazo: ${ev.plan.mac.map(x=>esc(x.evento.split(/[:(+]/)[0].trim())+" ("+fecha(x.fecha)+")").join(", ")} · `:""}“Ver detalle” explica por qué ${ev.plan.N} día${ev.plan.N>1?"s":""}</span>`:""}</div>`:ev.cuando?`<div class="plan"><span><b>Cuándo:</b> ${esc(ev.cuando)}</span></div>`:""}
+    ${ev.acc.startsWith("COMPRAR")||ev.acc==="ANTICIPAR"?`<div class="plan"><span><b>Cuándo:</b> ${esc(ev.cuando)}</span><span><b>Cuánto:</b> ${usd(ev.monto)} (máximo ${usd(MAXPOS)} por acción)</span><span><b>Salida:</b> ${esc(ev.venta)}</span>${ev.plan?`<span class="faint" style="font-size:12px">${ev.plan.mac.length?`⚠ En el plazo: ${ev.plan.mac.map(x=>esc(x.evento.split(/[:(+]/)[0].trim())+" ("+fecha(x.fecha)+")").join(", ")} · `:""}“Ver detalle” explica por qué ${ev.plan.N} día${ev.plan.N>1?"s":""}</span>`:""}</div>`:ev.cuando?`<div class="plan"><span><b>Cuándo:</b> ${esc(ev.cuando)}</span></div>`:""}
     ${n0&&!compacta?`<div style="font-size:12.5px"><span class="faint">Noticia:</span> <a href="${esc(n0.url)}" target="_blank" rel="noopener">${esc(n0.titulo)}</a> <span class="faint">· ${esc(n0.fuente||"")}${n0.fecha?" · "+hace(n0.fecha):""}</span></div>`:""}
   </div>
   <div class="foot"><button class="btn small ${enA?"on":""}" data-armar="${esc(ev.t)}">${enA?"✓ En mi cartera armada":"+ Agregar a la cartera"}</button><button class="btn small" data-ver="${esc(ev.t)}">Ver detalle</button></div></article>`}
@@ -446,22 +452,30 @@ function cinta(){const el=$("#cinta");const M=[["US","EE.UU."],["LN","Londres"],
     F.map(f=>`<span class="mk"><b>${esc(f.nombre)}</b><span class="${f.r1d>=0?"up":"down"} mono">${sgn(f.r1d,2)}</span></span>`).join("")}
 function renderAhora(){const el=$("#tab-ahora");
   if(!C){el.innerHTML=`<div class="empty"><h2>Todavía no hay recomendaciones</h2><p>Se generan en la próxima actualización completa de GitHub (archivo candidatos.json). Ve a Actions → Run workflow y vuelve en ~1 hora.</p></div>`+`<div class="note">Mientras tanto, revisa ① Mercado hoy.</div>`;bindComunes(el);return}
-  const L=[...EV.values()],buy=L.filter(e=>e.acc.startsWith("COMPRAR")).sort((a,b)=>b.sc-a.sc),wait=L.filter(e=>e.acc==="ESPERAR").sort((a,b)=>b.sc-a.sc),watch=L.filter(e=>e.acc==="VIGILAR").sort((a,b)=>b.sc-a.sc);
+  const L=[...EV.values()],buy=L.filter(e=>e.acc.startsWith("COMPRAR")).sort((a,b)=>b.sc-a.sc),wait=L.filter(e=>e.acc==="ESPERAR").sort((a,b)=>b.sc-a.sc),watch=L.filter(e=>e.acc==="VIGILAR").sort((a,b)=>b.sc-a.sc),ant=L.filter(e=>e.acc==="ANTICIPAR").sort((a,b)=>(b.it.preola?.pts??0)+b.sc-(a.it.preola?.pts??0)-a.sc);
   const pos=decisionesCartera().filter(x=>x.acc!=="MANTENER");
   el.innerHTML=`
   <div class="kpis">
     <div class="kpi"><div class="l">Para comprar</div><div class="v up">${buy.length}</div><div class="s">${buy.filter(e=>e.acc==="COMPRAR AHORA").length} con su bolsa abierta ahora</div></div>
+    <div class="kpi"><div class="l">Anticipar (posible ola)</div><div class="v" style="color:#d8b4fe">${ant.length}</div><div class="s">todavía no suben</div></div>
     <div class="kpi"><div class="l">Esperar (ya subieron hoy)</div><div class="v" style="color:var(--warn)">${wait.length}</div></div>
     <div class="kpi"><div class="l">Vigilar</div><div class="v">${watch.length}</div></div>
     <div class="kpi"><div class="l">De tu cartera: revisar</div><div class="v ${pos.length?"down":""}">${pos.length}</div><div class="s">${PORT.snaps.length?"según las posiciones cargadas":"carga tus posiciones en ⑦"}</div></div>
     <div class="kpi"><div class="l">Analizadas</div><div class="v">${L.length}</div><div class="s">actualizadas ${hace(C.generado)}</div></div>
   </div>
+  ${novedades(buy,ant)}
   ${pos.length?`<div class="panel"><header><h2>Tu cartera: qué hacer</h2><span class="sub">según tus posiciones de TMSG</span></header><div class="grid g2">${pos.map(tarjetaPos).join("")}</div></div>`:""}
   <div class="panel"><header><h2>Comprar</h2><span class="sub">Ordenadas por puntaje. Verde = bolsa abierta ahora · azul = bolsa cerrada, la orden se ejecuta al abrir.</span></header>
     ${buy.length?`<div class="grid g2">${buy.slice(0,10).map(e=>tarjeta(e)).join("")}</div>`:`<div class="empty">Ninguna acción llega a 4 puntos en este momento. Abajo están las más cercanas y por qué no llegan.</div>`}</div>
+  ${ant.length?`<div class="panel"><header><h2>🔮 Posibles próximas olas</h2><span class="sub">Todavía no suben, pero tienen las señales que suelen venir antes de una subida. Posición chica (US$50 mil) y aumentar solo si confirma.</span></header><div class="grid g2">${ant.slice(0,8).map(e=>tarjeta(e)).join("")}</div>
+    <details class="note"><summary><b>¿Qué señales busca?</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">
+      <span>Revisa <b>todo el WLS</b> cada hora buscando acciones que <b>aún no han subido fuerte</b> (hoy &lt; +3%, semana &lt; +8%) pero que muestran: <b>cerca de su máximo de 52 semanas</b> (si lo rompe, suele seguir subiendo) · <b>volumen creciendo sin que el precio se dispare</b> (alguien está acumulando) · <b>tendencia de fondo positiva</b> (mes y 3 meses arriba) · <b>RSI 50–68</b> (fuerza sin exceso) · <b>volatilidad apretada</b> (se mueve menos que de costumbre, como un resorte).</span>
+      <span>Después se le suman o restan los mismos puntos que al resto: noticias, analistas, resultados, región, etc.</span>
+      <span><b>Es una apuesta anticipada:</b> no todas se convierten en ola. Por eso el monto es chico y la regla es clara: si en 3 sesiones no se mueve, se rota; si cae −5%, se vende. Abajo, en el historial, pueden ver cuántas funcionaron.</span></div></details></div>`:""}
   ${buy.length<3?diagnostico(L,buy):""}
   ${wait.length?`<div class="panel"><header><h2>Esperar</h2><span class="sub">Buenas señales, pero ya subieron mucho hoy con su bolsa abierta.</span></header><div class="grid g3">${wait.slice(0,6).map(e=>tarjeta(e,true)).join("")}</div></div>`:""}
   ${watch.length?`<details class="panel"><summary><b>Vigilar (${watch.length})</b> <span class="sub">tienen algo a favor, pero no lo suficiente</span></summary><div class="grid g3" style="margin-top:10px">${watch.slice(0,12).map(e=>tarjeta(e,true)).join("")}</div></details>`:""}
+  ${historialHTML()}
   <details class="note"><summary><b>¿Cómo decide la página?</b></summary><div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
     <span>Suma puntos por: ola de la semana (+1,5) · ola de hoy (+1,5) · que en su región las olas hayan seguido subiendo el último año (+1) · estar entre las mejores por tu modelo de factores (+1) · noticias recientes con tono positivo (+1) · analistas en “compra” con 3 o más opiniones (+1) y precio objetivo ≥ 15% arriba (+0,5) · ventas ≥ +10% o utilidad ≥ +15% (+1) · ir por su cuenta respecto al índice (+0,5).</span>
     <span>Resta por: noticias negativas (−1,5) · analistas negativos (−1) · resultados débiles (−1) · mucho ruido en redes después de subir fuerte (−1) · moverse igual que el índice (−0,5) · reportar en ≤ 3 días (−0,5) · se espera que abra +3% o más (−1, llegarían tarde) · precio bajo US$5 por la comisión (−3).</span>
@@ -473,7 +487,7 @@ function renderAhora(){const el=$("#tab-ahora");
 let fA={q:"",vista:"todas",orden:"sc"};
 function renderAcciones(){const el=$("#tab-acciones");
   const L=[...EV.values()].filter(e=>{const it=e.it,q=fA.q;if(q&&!(it.bbg+" "+(it.info?.nombre||it.nombre||"")+" "+it.t).toLowerCase().includes(q))return false;
-    if(q)return true;if(fA.vista==="comprar")return e.acc.startsWith("COMPRAR");if(fA.vista==="olas")return it.origen.some(x=>x.startsWith("ola"));if(fA.vista==="cartera")return e.cart;return true});
+    if(q)return true;if(fA.vista==="comprar")return e.acc.startsWith("COMPRAR");if(fA.vista==="olas")return it.origen.some(x=>x.startsWith("ola"));if(fA.vista==="ant")return e.acc==="ANTICIPAR";if(fA.vista==="cartera")return e.cart;return true});
   L.sort((a,b)=>fA.orden==="sc"?b.sc-a.sc:(b.o[fA.orden]??-999)-(a.o[fA.orden]??-999));
   const uq=fA.q&&U?U.filas.filter(o=>!EV.has(o.t)&&(o.bbg+" "+(o.nombre||"")).toLowerCase().includes(fA.q)).slice(0,30):[];
   if(fA.q&&!LISTA_WLS)cargarListaWLS();
@@ -481,13 +495,13 @@ function renderAcciones(){const el=$("#tab-acciones");
   const fq=fA.q&&LISTA_WLS?LISTA_WLS.filter(x=>!enU.has(claveTicker(x.bbg))&&(x.bbg+" "+x.nombre).toLowerCase().includes(fA.q)).slice(0,20):[];
   el.innerHTML=`<div class="panel"><header><h2>Acciones del WLS analizadas a fondo</h2><span class="sub">${EV.size} elegidas entre ${U?U.filas.length.toLocaleString("es-CL"):"–"} del WLS (Yahoo Finance): olas de hoy y de la semana, las mejores por factores y tu cartera.</span></header>
     <div class="row"><input id="aq" type="search" placeholder="Buscar ticker o nombre (también busca en todo el WLS)" value="${esc(fA.q)}" style="min-width:280px;flex:1">
-    <div class="seg">${[["todas","Todas"],["comprar","Para comprar"],["olas","En ola"],["cartera","Mi cartera"]].map(([k,l])=>`<button data-av="${k}" aria-selected="${fA.vista===k}">${l}</button>`).join("")}</div>
+    <div class="seg">${[["todas","Todas"],["comprar","Para comprar"],["ant","Posible ola"],["olas","En ola"],["cartera","Mi cartera"]].map(([k,l])=>`<button data-av="${k}" aria-selected="${fA.vista===k}">${l}</button>`).join("")}</div>
     <select id="ao"><option value="sc" ${fA.orden==="sc"?"selected":""}>Orden: recomendación</option><option value="r1d" ${fA.orden==="r1d"?"selected":""}>Orden: día</option><option value="r1s" ${fA.orden==="r1s"?"selected":""}>Orden: semana</option><option value="r1m" ${fA.orden==="r1m"?"selected":""}>Orden: mes</option></select></div></div>
   <div class="tbox"><table><thead><tr><th>Acción</th><th>Decisión</th><th class="n">Pts</th><th>Bolsa</th><th class="n">Día</th><th class="n">Semana</th><th class="n">Mes</th><th>Por qué está</th><th>Analistas</th><th class="n">Ventas / Utilidad</th><th>Noticias</th><th>Gráfico 3 meses</th></tr></thead><tbody>
   ${L.map(e=>{const it=e.it,inf=it.info||{};return`<tr class="click" data-ver="${esc(e.t)}"><td class="tkc"><b>${esc(it.bbg)}</b><span>${esc(inf.nombre||it.nombre||"")}</span></td>
-    <td><span class="chip ${e.acc.startsWith("COMPRAR")?"good":e.acc==="ESPERAR"?"warn":""}">${esc(e.acc)}</span></td><td class="n">${fmt(e.sc,1)}</td><td>${chipBolsa(e.code)}</td>
+    <td><span class="chip ${e.acc.startsWith("COMPRAR")?"good":e.acc==="ESPERAR"?"warn":""}" ${e.acc==="ANTICIPAR"?'style="color:#d8b4fe;border-color:#4c1d95;background:#1e1236"':""}>${esc(e.acc)}</span></td><td class="n">${fmt(e.sc,1)}</td><td>${chipBolsa(e.code)}</td>
     <td class="n">${pct(e.o.r1d)}</td><td class="n">${pct(e.o.r1s)}</td><td class="n">${pct(e.o.r1m)}</td>
-    <td>${it.origen.map(x=>`<span class="chip ${x.startsWith("ola")?"good":x==="cartera"?"info":""}">${({"ola-hoy":"ola hoy","ola-semana":"ola semana","factores":"factores","cartera":"cartera","reciente":"ola reciente","pedida":"pedida"}[x]||x)}</span>`).join(" ")}</td>
+    <td>${it.origen.map(x=>`<span class="chip ${x.startsWith("ola")?"good":x==="cartera"?"info":""}">${({"ola-hoy":"ola hoy","ola-semana":"ola semana","factores":"factores","cartera":"cartera","reciente":"ola reciente","pedida":"pedida","pre-ola":"posible ola"}[x]||x)}</span>`).join(" ")}</td>
     <td>${inf.reco&&(inf.nAnalistas||0)>0?`${esc(recoTxt(inf))} <span class="faint">(${inf.nAnalistas})</span>${inf.upside!=null?` · ${pct(inf.upside,0)}`:""}`:'<span class="faint">–</span>'}</td>
     <td class="n">${pct(inf.ventas,0)} / ${pct(inf.utilidad,0)}</td><td><span class="chip ${e.tn.s>0?"good":e.tn.s<0?"bad":""}">${esc(e.tn.txt)}</span></td><td>${spark((it.hist||[]).slice(-63),110,30)}</td></tr>`}).join("")||`<tr><td colspan="12" class="faint" style="padding:18px">Ninguna coincide.</td></tr>`}</tbody></table></div>
   ${uq.length?`<div class="panel"><header><h3>También en el WLS (sin análisis a fondo)</h3><span class="sub">No están entre las analizadas ahora. Haz clic para ver su ficha y, si quieres, pedir que se analice a fondo.</span></header><div class="tbox"><table><thead><tr><th>Acción</th><th>Bolsa</th><th class="n">Día</th><th class="n">Semana</th><th class="n">Mes</th><th class="n">US$M/día</th></tr></thead><tbody>${uq.map(o=>`<tr class="click" data-wls="${esc(o.t)}"><td class="tkc"><b>${esc(o.bbg)}</b><span>${esc(o.nombre||"")}</span></td><td>${chipBolsa(codBolsa(o.bbg))}</td><td class="n">${pct(o.r1d)}</td><td class="n">${pct(o.r1s)}</td><td class="n">${pct(o.r1m)}</td><td class="n">${fmt(o.liq,1)}</td></tr>`).join("")}</tbody></table></div></div>`:""}
@@ -536,7 +550,7 @@ function renderArmar(){const el=$("#tab-armar");$("#nArmar").textContent=ARM.ite
   it.filter(x=>EV.get(x.t).cart).forEach(x=>avisos.push(["info",`${EV.get(x.t).it.bbg} ya la tienen: el monto sería adicional.`]));
   el.innerHTML=`<div class="build"><div style="display:flex;flex-direction:column;gap:12px">
     <div class="panel"><header><h2>Elige acciones</h2><span class="sub">Primero las recomendadas para comprar. Cada tarjeta muestra su gráfico de 3 meses.</span></header></div>
-    <div class="grid g3">${L.slice(0,36).map(e=>{const x=e.it,en=ARM.items.some(a=>a.t===e.t);return`<div class="card"><div class="row" style="justify-content:space-between"><div class="tkc"><b>${esc(x.bbg)}</b><span>${esc(x.info?.nombre||x.nombre||"")}</span></div><span class="chip ${e.acc.startsWith("COMPRAR")?"good":e.acc==="ESPERAR"?"warn":""}">${esc(e.acc)}</span></div>
+    <div class="grid g3">${L.slice(0,36).map(e=>{const x=e.it,en=ARM.items.some(a=>a.t===e.t);return`<div class="card"><div class="row" style="justify-content:space-between"><div class="tkc"><b>${esc(x.bbg)}</b><span>${esc(x.info?.nombre||x.nombre||"")}</span></div><span class="chip ${e.acc.startsWith("COMPRAR")?"good":e.acc==="ESPERAR"?"warn":""}" ${e.acc==="ANTICIPAR"?'style="color:#d8b4fe;border-color:#4c1d95;background:#1e1236"':""}>${esc(e.acc)}</span></div>
       ${spark((x.hist||[]).slice(-63),300,60).replace('width="300"','width="100%"')}
       <div class="row mono" style="gap:12px;font-size:12px"><span>Día ${pct(e.o.r1d)}</span><span>Sem ${pct(e.o.r1s)}</span><span>Mes ${pct(e.o.r1m)}</span><span class="faint">${fmt(e.sc,1)} pts</span></div>
       <div class="faint" style="font-size:12px;min-height:32px">${esc(e.razones[0]||e.alertas[0]||"")}</div>
@@ -1200,6 +1214,24 @@ function cargarListaWLS(){if(_cargandoLista)return;_cargandoLista=true;
   fetch(`https://raw.githubusercontent.com/${REPO.o}/${REPO.r}/${EQ.rama||"main"}/universo.txt?v=${Date.now()}`,{cache:"no-store"}).then(r=>r.ok?r.text():"").then(t=>{
     LISTA_WLS=t.split("\n").map(l=>l.split("#")[0].trim()).filter(Boolean).map(l=>{const[a,b]=l.split("|");return{bbg:a.trim().replace(/ equity$/i,""),nombre:(b||"").trim()}});
     if(fA.q){const act=document.activeElement?.id==="aq";renderAcciones();if(act){const n=$("#aq");n.focus();n.setSelectionRange(n.value.length,n.value.length)}}}).catch(()=>{LISTA_WLS=[]})}
+
+/* novedades desde la ultima visita: acciones que pasaron a COMPRAR o ANTICIPAR */
+const VISTAS_PREV=(()=>{const v=load("gtc-vistas")||{};return{...v}})();
+function novedades(buy,ant){const ahora=[...buy,...ant],antes=VISTAS_PREV,ult=load("gtc-ultvisita");
+  const v=load("gtc-vistas")||{};const lim=Date.now()-5*864e5;Object.keys(v).forEach(k=>{if(v[k]<lim)delete v[k]});ahora.forEach(e=>{if(!v[e.t])v[e.t]=Date.now()});store("gtc-vistas",v);
+  const nuevas=ahora.filter(e=>!antes[e.t]);if(!ult){store("gtc-ultvisita",Date.now());return""}
+  clearTimeout(novedades.h);novedades.h=setTimeout(()=>store("gtc-ultvisita",Date.now()),60000);
+  if(!nuevas.length)return"";
+  return`<div class="note" style="border-style:solid;border-color:#14532d;background:#052e16;color:#dcfce7"><b>🆕 Nuevas desde tu última visita (${hace(new Date(ult).toISOString())}):</b> ${nuevas.slice(0,14).map(e=>`<button class="chip ${e.acc==="ANTICIPAR"?"":"good"}" data-ver="${esc(e.t)}" ${e.acc==="ANTICIPAR"?'style="color:#d8b4fe;border-color:#4c1d95;background:#1e1236"':""}>${esc(e.it.bbg)} · ${e.acc==="ANTICIPAR"?"posible ola":"comprar"}</button>`).join(" ")}${nuevas.length>14?` <span class="faint">y ${nuevas.length-14} más</span>`:""}</div>`}
+const fechaCL=iso=>fecha(new Date(iso).toLocaleDateString("sv-SE",{timeZone:"America/Santiago"}));
+/* historial: cuando aparecio cada señal y cuanto ha subido desde entonces */
+function historialHTML(){const H=C?.historial;if(!H)return"";const F=Object.entries(H).filter(([t,h])=>h.px&&h.pxHoy).map(([t,h])=>({t,...h,ret:(h.pxHoy/h.px-1)*100,bbg:U?.porT?.get(t)?.bbg||t,nom:U?.porT?.get(t)?.nombre||""}));
+  if(F.length<3)return"";const res=tipo=>{const x=F.filter(f=>f.tipo===tipo);if(!x.length)return null;return{n:x.length,pos:x.filter(f=>f.ret>0).length,med:x.reduce((s,f)=>s+f.ret,0)/x.length,ola:x.filter(f=>f.fOla).length}};
+  const rp=res("pre-ola"),ro=res("ola");const ord=[...F].sort((a,b)=>(b.f||"").localeCompare(a.f||""));
+  return`<details class="panel"><summary><b>📈 Historial de señales: ¿funcionan?</b> <span class="sub">últimos 21 días, precio en moneda local desde que apareció cada una</span></summary>
+  <div class="kpis" style="margin-top:10px">${rp?`<div class="kpi"><div class="l">Posibles olas marcadas</div><div class="v">${rp.n}</div><div class="s">${rp.pos} subieron desde la señal · promedio ${sgn(rp.med,1)} · ${rp.ola} se convirtieron en ola</div></div>`:""}${ro?`<div class="kpi"><div class="l">Olas marcadas</div><div class="v">${ro.n}</div><div class="s">${ro.pos} siguieron subiendo · promedio ${sgn(ro.med,1)}</div></div>`:""}</div>
+  <div class="tbox" style="max-height:420px"><table><thead><tr><th>Acción</th><th>Señal</th><th>Cuándo apareció</th><th class="n">Precio entonces</th><th class="n">Hoy</th><th class="n">Desde la señal</th><th>¿Se hizo ola?</th></tr></thead><tbody>${ord.map(f=>`<tr class="click" data-ver="${esc(f.t)}"><td class="tkc"><b>${esc(f.bbg)}</b><span>${esc(f.nom)}</span></td><td>${f.tipo==="pre-ola"?'<span class="chip" style="color:#d8b4fe;border-color:#4c1d95;background:#1e1236">posible ola</span>':'<span class="chip good">ola</span>'}</td><td>${fechaCL(f.f)} <span class="faint">${hace(f.f)}</span></td><td class="n">${fmt(f.px,f.px>=1000?0:2)}</td><td class="n">${fmt(f.pxHoy,f.pxHoy>=1000?0:2)}</td><td class="n">${pct(f.ret,1)}</td><td>${f.tipo==="pre-ola"?(f.fOla?`sí, el ${fechaCL(f.fOla)}`:'<span class="faint">todavía no</span>'):"–"}</td></tr>`).join("")}</tbody></table></div>
+  <span class="faint" style="font-size:12px">Sirve para saber cuánto confiar en cada tipo de señal. Si las “posibles olas” no están funcionando estas semanas, conviene darles menos peso.</span></details>`}
 /* ===================== GENERAL ===================== */
 function bindComunes(root){root.querySelectorAll("[data-armar]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();toggleArmar(b.dataset.armar)});
   root.querySelectorAll("[data-ver]").forEach(b=>b.onclick=ev=>{if(ev.target.closest("[data-armar]"))return;ev.stopPropagation();detalle(b.dataset.ver)});
