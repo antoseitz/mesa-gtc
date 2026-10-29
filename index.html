@@ -332,13 +332,13 @@ async function bajarEquipo(){
 /* ===================== DATOS ===================== */
 /* los datos vienen del radar (repositorio radar-gtc), aunque esta pagina este en otro repositorio */
 const DATOS=/\/radar-gtc\//.test(location.pathname)||location.hostname==="localhost"?"./":"https://antoseitz.github.io/radar-gtc/";
-let D=null,U=null,C=null,BBG=load("gtc-bbg"),PORT=load("gtc-port")||{snaps:[]};
+let EST=null,CARGA=null,D=null,U=null,C=null,BBG=load("gtc-bbg"),PORT=load("gtc-port")||{snaps:[]};
 let ARM=load("gtc-mesa")||{items:[]};
 const CANDS=()=>C?.items||[];
 function cargarTodo(){
   const get=f=>fetch(f+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(t=>t?JSON.parse(t.replace(/(?<![\w"])-?(NaN|Infinity)(?![\w"])/g,"null")):null).catch(()=>null);
-  return Promise.all([get(DATOS+"radar_gtc.json"),get(DATOS+"universo.json"),get(DATOS+"candidatos.json"),get(DATOS+"mercado.json")]).then(([d,u,c,m])=>{
-    if(d)D=d;if(m)M=m;
+  return Promise.all([get(DATOS+"radar_gtc.json"),get(DATOS+"universo.json"),get(DATOS+"candidatos.json"),get(DATOS+"mercado.json"),get(DATOS+"estado.json")]).then(([d,u,c,m,est])=>{EST=est;
+    if(d)D=d;if(m)M=m;CARGA={radar:!!d,universo:!!u,candidatos:!!c,mercado:!!m,hora:new Date()};
     if(u&&u.filas){U={...u,filas:u.filas.map(f=>{const o={};u.cols.forEach((k,i)=>o[k]=f[i]);return o})};U.porT=new Map(U.filas.map(o=>[o.t,o]));U.porB=new Map(U.filas.map(o=>[claveTicker(o.bbg),o]))}
     if(c)C=c;
     evaluarTodo();renderTodo()});
@@ -453,7 +453,7 @@ function cinta(){const el=$("#cinta");const M=[["US","EE.UU."],["LN","Londres"],
   el.innerHTML=M.map(([c,n])=>{const e=estadoBolsa(c),ab=e.fase==="abierta",pa=!ab?proximaApertura(c):null;return`<span class="mk" title="${esc(e.txt)}"><span class="dot ${ab?"on":""}"></span><b>${n}</b><span class="t">${ab?"cierra "+horaChile(c,BOLSAS[c].ses[BOLSAS[c].ses.length-1][1]):"abre "+(pa?pa.txt:"")}</span></span>`}).join("")+
     F.map(f=>`<span class="mk"><b>${esc(f.nombre)}</b><span class="${f.r1d>=0?"up":"down"} mono">${sgn(f.r1d,2)}</span></span>`).join("")}
 function renderAhora(){const el=$("#tab-ahora");
-  if(!C){el.innerHTML=`<div class="empty"><h2>Todavía no hay recomendaciones</h2><p>Se generan en la próxima actualización completa de GitHub (archivo candidatos.json). Ve a Actions → Run workflow y vuelve en ~1 hora.</p></div>`+`<div class="note">Mientras tanto, revisa ① Mercado hoy.</div>`;bindComunes(el);return}
+  if(!C){el.innerHTML=`<div class="empty"><h2>Todavía no hay recomendaciones</h2><p>Se generan en la próxima actualización completa de GitHub (archivo candidatos.json). Ve a Actions → Run workflow y vuelve en ~1 hora.</p>${CARGA?`<p class="faint" style="font-size:12.5px">Archivos del radar: ${Object.entries(CARGA).filter(([k])=>k!=="hora").map(([k,v])=>`${k} ${v?"✓":"✗ (todavía no está publicado)"}`).join(" · ")}</p>${erroresHTML()}`:'<p class="faint">Cargando archivos…</p>'}</div>`+`<div class="note">Mientras tanto, revisa ① Mercado hoy.</div>`;bindComunes(el);return}
   const L=[...EV.values()],buy=L.filter(e=>e.acc.startsWith("COMPRAR")).sort((a,b)=>b.sc-a.sc),wait=L.filter(e=>e.acc==="ESPERAR").sort((a,b)=>b.sc-a.sc),watch=L.filter(e=>e.acc==="VIGILAR").sort((a,b)=>b.sc-a.sc),ant=L.filter(e=>e.acc==="ANTICIPAR").sort((a,b)=>(b.it.preola?.pts??0)+b.sc-(a.it.preola?.pts??0)-a.sc);
   const pos=decisionesCartera().filter(x=>x.acc!=="MANTENER");
   el.innerHTML=`
@@ -1288,8 +1288,10 @@ function bindVivo(root){const b=root.querySelector("#tvCartBtn");if(b)b.onclick=
 function bindComunes(root){root.querySelectorAll("[data-armar]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();toggleArmar(b.dataset.armar)});
   root.querySelectorAll("[data-ver]").forEach(b=>b.onclick=ev=>{if(ev.target.closest("[data-armar]"))return;ev.stopPropagation();detalle(b.dataset.ver)});
   root.querySelectorAll("[data-cerrar]").forEach(b=>b.onclick=()=>$("#drawer").innerHTML="")}
+function erroresHTML(){const E=[...(EST?.errores||[])];if(!E.length)return EST?`<p class="faint" style="font-size:12px">Última actualización de GitHub (${esc(EST.modo||"")}) ${hace(EST.generado)} sin errores.</p>`:"";
+  return`<div class="note" style="border-color:#7f1d1d;color:#fca5a5;text-align:left"><b>Errores en la última actualización de GitHub (${hace(EST.generado)}):</b><ul style="margin:6px 0 0;padding-left:18px">${E.map(x=>`<li><b>${esc(x.donde)}</b>: ${esc(x.error)} <span class="faint">${esc(x.linea||"")}</span></li>`).join("")}</ul><span class="faint">Manden una foto de esto para arreglarlo.</span></div>`}
 function renderStatus(){const st=$("#status");const g=D?.generado?new Date(D.generado):null,cand=C?.generado?new Date(C.generado):null;
-  st.innerHTML=`<span><span class="dot ${g&&Date.now()-g<3*36e5?"on":""}"></span>Precios ${g?hace(D.generado):"–"}</span><span>· Recomendaciones ${cand?hace(C.generado):"–"}</span><span>· Hora Chile ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",timeZone:"America/Santiago"})}</span>${g&&Date.now()-g>75*6e4&&(estadoBolsa("US").fase==="abierta"||["KS","JP","TT","LN"].some(c=>estadoBolsa(c).fase==="abierta"))?`<span class="chip warn" title="En días hábiles se actualiza cada 15 min. Si pasa más de 1 hora, en GitHub → radar-gtc → Actions revisa si la última ejecución está en amarillo (corriendo) o rojo (falló).">⚠ Datos atrasados: revisar Actions en GitHub</span>`:""}`}
+  st.innerHTML=`<span><span class="dot ${g&&Date.now()-g<3*36e5?"on":""}"></span>Precios ${g?hace(D.generado):"–"}</span><span>· Recomendaciones ${cand?hace(C.generado):"–"}</span>${EST?.errores?.length?`<span class="chip bad" title="${esc(EST.errores.map(x=>x.donde+": "+x.error).join(" | "))}">⚠ ${EST.errores.length} error${EST.errores.length>1?"es":""} en la actualización</span>`:""}<span>· Hora Chile ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",timeZone:"America/Santiago"})}</span>${g&&Date.now()-g>75*6e4&&(estadoBolsa("US").fase==="abierta"||["KS","JP","TT","LN"].some(c=>estadoBolsa(c).fase==="abierta"))?`<span class="chip warn" title="En días hábiles se actualiza cada 15 min. Si pasa más de 1 hora, en GitHub → radar-gtc → Actions revisa si la última ejecución está en amarillo (corriendo) o rojo (falló).">⚠ Datos atrasados: revisar Actions en GitHub</span>`:""}`}
 function mostrarError(donde,e){console.error(donde,e);const b=$("#errBox");if(!b)return;b.hidden=false;const li=document.createElement("li");li.textContent=`${donde}: ${e&&e.message||e}${e&&e.stack?" · "+String(e.stack).split("\n")[1]?.trim():""}`;if(b.querySelectorAll("li").length<8)b.querySelector("ul").appendChild(li)}
 function seguro(nombre,f){try{f()}catch(e){mostrarError(nombre,e);const sec={renderMercado:"#mTop",renderAhora:"#tab-ahora",renderAcciones:"#tab-acciones",renderArmar:"#tab-armar",renderEntender:"#tab-entender",renderBBG:"#tab-bbg",renderPort:"#tab-port"}[nombre];
   if(sec&&$(sec))$(sec).insertAdjacentHTML("afterbegin",`<div class="note" style="border-color:#7f1d1d;color:#fca5a5">Esta sección tuvo un error y no se pudo mostrar completa (${esc(e&&e.message||e)}). Manda una foto de este mensaje para arreglarlo.</div>`)}}
