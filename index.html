@@ -387,7 +387,20 @@ function evaluar(it){
     else r.push(`Redes (solo EE.UU., Reddit/StockTwits): ${red.nivel}${red.sube?", menciones al alza":""}${tn.s>0?" y coincide con noticias positivas":tn.n?"":"; sin noticia que lo respalde"}`)}
   if(o.corr!=null){if(o.corr<0.3){sc+=.5;r.push(`Va por su cuenta (correlación ${fmt(o.corr,2)} con el mercado): puede separarlos del WLS`)}else if(o.corr>=0.6){sc-=.5;al.push(`Se mueve casi como el índice (correlación ${fmt(o.corr,2)}): aporta poco contra el WLS`)}}
   const dE=diasHasta(inf.earn);if(dE!=null&&dE>=0&&dE<=3){sc-=.5;al.push(`Reporta resultados en ${dE===0?"hoy":dE+" día"+(dE>1?"s":"")} (${fecha(inf.earn)}): puede moverse ±10% para cualquier lado`)}
-  const px=o.pxusd;if(px!=null&&px<5){sc-=3;al.push(`Precio US$${fmt(px,2)}: la comisión por acción se come ${fmt(2*COMISION/px*100,1)}% ida y vuelta`)}
+  const px=o.pxusd;
+  const comisionRT=px?2*COMISION/px:null;      // fraccion: comision de comprar + vender, como % del precio
+  let vetoComision=false;
+  if(comisionRT==null){al.push(`Sin precio en dólares confiable: no se puede calcular cuánto pesa la comisión`);vetoComision=true}
+  else if(comisionRT>=0.05){sc-=6;al.push(`Precio US$${fmt(px,4)}: la comisión (US$0,005 por acción, ida y vuelta) se come ${fmt(comisionRT*100,1)}% del precio — ninguna ola normal del WLS compensa eso`);vetoComision=true}
+  else if(comisionRT>=0.015){sc-=Math.min(6,comisionRT*100);al.push(`Precio US$${fmt(px,2)}: la comisión pesa ${fmt(comisionRT*100,1)}% ida y vuelta, hay que descontarla de la ganancia esperada`)}
+  if(dur&&dur.exceso!=null&&comisionRT!=null){const gananciaNeta=dur.exceso-comisionRT*100;
+    if(gananciaNeta<=0.5){vetoComision=true;al.push(`La ganancia esperada de la ola (${fmt(dur.exceso,2)}%) menos la comisión ida y vuelta (${fmt(comisionRT*100,2)}%) deja solo ${fmt(gananciaNeta,2)}%: no compensa el riesgo`)}}
+  const monLocal=it.sens?.mon;
+  if(monLocal&&monLocal!=="USD"&&it.sens?.betaDxy!=null&&Math.abs(it.sens.betaDxy)>=0.3){al.push(`Cotiza en ${esc(monLocal)}: si el dólar sube 1%, históricamente se mueve ${sgn(it.sens.betaDxy,1)} en dólares — el tipo de cambio también pesa acá`)}
+  const relS=o.relS,relM=o.relM;
+  let vetoRelativo=false;
+  if(relS!=null&&relM!=null&&relS<=0&&relM<=0){vetoRelativo=true;al.push(`Se mueve peor que el WLS: esta semana ${sgn(relS,1)} y este mes ${sgn(relM,1)} contra el índice (en dólares, aprox. con ACWI). Aunque suba, no mejora tu posición en el ranking.`)}
+  else if(relS!=null&&relS>0){r.push(`Le gana al WLS esta semana: ${sgn(relS,1)} de diferencia`)}
   // accion concreta segun el estado de su bolsa
   const e=BOLSAS[code]?estadoBolsa(code):{fase:"?"},pa=BOLSAS[code]&&e.fase!=="abierta"?proximaApertura(code):null,b=BOLSAS[code];
   const cierre=b?horaChile(code,b.ses[b.ses.length-1][1]):"",cierreM=b?horaChile(code,b.ses[b.ses.length-1][1]-0.5):"";
@@ -396,9 +409,13 @@ function evaluar(it){
   else if(gap!=null&&gap<=-2)al.push(`Se espera que abra ${sgn(gap)} (su mercado cayó en EE.UU.): entraría más barata, pero confirmen que la ola sigue`);
   let acc,cls,frase,cuando;
   const dias=dur&&dur.dias?dur.dias:null;
-  if(it.preola&&!olaH&&!olaS&&sc>=2.5&&(o.r1d??0)<3){acc="ANTICIPAR";cls="a-ant";
+  if(vetoComision){acc="NO POR AHORA";cls="a-hold";
+    frase=`No se recomienda comprar: la comisión de comprar y vender (US$0,005 por acción, ida y vuelta) se come una parte demasiado grande del precio o de la ganancia esperada de la ola.`;cuando=""}
+  else if(it.preola&&!olaH&&!olaS&&sc>=2.5&&(o.r1d??0)<3){acc="ANTICIPAR";cls="a-ant";
     frase=`Posible próxima ola: todavía no sube, pero tiene las señales que suelen venir antes. Entrar con una posición chica y aumentar solo si confirma (sube ≥ 3% con volumen alto).`;
     cuando=e.fase==="abierta"&&minCierre(code)>=35?`Su bolsa está abierta: orden antes de las ${cierreM} (Chile)`:`La orden se ejecuta al abrir (${pa?pa.txt+" hora Chile":"próxima sesión"})`}
+  else if(sc>=4&&vetoRelativo){acc="VIGILAR";cls="a-hold";
+    frase=`Tiene buenas señales, pero se mueve peor que el WLS esta semana y este mes: comprarla ahora no mejoraría tu posición en el ranking. Esperar a que vuelva a ganarle al índice.`;cuando="Revisar en la próxima actualización"}
   else if(sc>=4){
     if(e.fase==="abierta"&&(o.r1d??0)>=6){acc="ESPERAR";cls="a-wait";frase=`Esperar: ya subió ${sgn(o.r1d)} hoy. Con ~20 min de desfase llegarías tarde; mejor en la próxima apertura si sigue fuerte.`;cuando="Revisar mañana antes de que abra"}
     else if(e.fase==="abierta"&&minCierre(code)!=null&&minCierre(code)<35){acc="COMPRAR AL ABRIR";cls="a-open";frase=`Recomiendo comprar en la próxima apertura${dias?` para aprovechar la ola de ~${dias} día${dias>1?"s":""}`:""}: su bolsa cierra en ${minCierre(code)} min y la orden (~20 min) no alcanza.`;cuando=`Dejar la orden para la próxima apertura`}
@@ -1251,7 +1268,7 @@ function miniVivo(d,w=260,hh=70){const v=d.v,b=d.prev??v.find(x=>x!=null);const 
   return`<svg viewBox="0 0 ${w} ${hh}" style="width:100%;height:${hh}px" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="${w}" y1="${Y(b)}" y2="${Y(b)}" stroke="#3b4d6b" stroke-dasharray="3 3"/><polyline fill="none" stroke="${col}" stroke-width="1.8" points="${pts}"/></svg>`}
 let tvCart=false;
 function tvSimbolo(raw){const p=raw.replace(/ equity$/i,"").trim().split(/\s+/),t=p[0],ex=(p[1]||"US").toUpperCase();
-  if(["US","UN","UW","UQ","UA","UR","UP","UV"].includes(ex))return t;if(ex==="KS"||ex==="KQ")return"KRX:"+t;if(ex==="TT")return"TWSE:"+t;if(ex==="JP"||ex==="JT")return"TSE:"+t;if(ex==="HK")return"HKEX:"+t;if(ex==="LN")return"LSE:"+t;return null}
+  if(["US","UN","UW","UQ","UA","UR","UP","UV"].includes(ex))return t;return null} /* Corea, Taiwan, Japon, etc. no se pueden insertar: se usa la tarjeta de Yahoo */
 function carteraVivoHTML(conTV=true){const s0=PORT.snaps[PORT.snaps.length-1];if(!s0)return"";
   const s={...s0,pos:(s0.pos||[]).map(p=>({...p,raw:String(p.raw||p.k||"")}))};
   const F=s.pos.map(p=>{const d=datosVivo(p);let f=p.px&&d?d.u/p.px:1;if(!(f>0.6&&f<1.6))f=1;/* si no calza (otra moneda o dato malo), no se ajusta */const valor=p.gross*f,desde=p.abs!=null?((1+p.abs/100)*f-1)*100:null;
@@ -1259,13 +1276,14 @@ function carteraVivoHTML(conTV=true){const s0=PORT.snaps[PORT.snaps.length-1];if
   const con=F.filter(x=>x.d),tot=F.reduce((a,x)=>a+x.valor,0),hoy=con.reduce((a,x)=>a+(x.pnlHoy||0),0),costo=F.reduce((a,x)=>a+(x.p.abs!=null?x.p.gross/(1+x.p.abs/100):x.p.gross),0);
   const acwi=M?(MS().get("ACWI")):null,hoyPct=tot?100*hoy/tot:null;
   if(!M?.cartera)return`<div class="panel"><header><h2>📡 Cómo va lo que tenemos</h2></header><p class="sub">Falta la primera actualización con los precios cada 5 min de la cartera (llegan en ≤ 15 min después de subir el radar nuevo).</p></div>`;
-  const cards=F.sort((a,b)=>(b.d?1:0)-(a.d?1:0)||(b.valor-a.valor)).map(x=>{const d=x.d,ab=BOLSAS[x.code]&&estadoBolsa(x.code).fase==="abierta";
+  const cardY=x=>{const d=x.d,ab=BOLSAS[x.code]&&estadoBolsa(x.code).fase==="abierta";
     return`<div class="card" ${EV.has(U?.porB?.get(claveTicker(x.p.raw))?.t)?`data-ver="${esc(U.porB.get(claveTicker(x.p.raw)).t)}" style="cursor:pointer"`:""}>
       <div class="row" style="justify-content:space-between"><div><b class="mono">${esc(x.p.raw)}</b> <span class="faint" style="font-size:12px">${esc(x.p.des||"")}</span></div>${BOLSAS[x.code]?chipBolsa(x.code):""}</div>
       ${d?`<div class="row" style="justify-content:space-between;align-items:baseline"><span class="mono" style="font-size:20px;font-weight:600" title="Último precio (moneda local)">${fmt(d.u,d.u>=1000?0:2)}</span><span class="mono" style="font-size:16px">${pct(d.dHoy,2)} <span class="faint" style="font-size:11px">${ab?"hoy":"última sesión"}</span></span></div>
         ${miniVivo(d)}
         <div class="row mono" style="justify-content:space-between;font-size:12px"><span>${x.pnlHoy!=null?`<span class="${x.pnlHoy>=0?"up":"down"}">${x.pnlHoy>=0?"+":"−"}${usd(Math.abs(x.pnlHoy)).replace("−","")}</span> ${ab?"hoy":"en la sesión"}`:""}</span><span>desde la compra ${pct(x.desde,1)}</span></div>
-        <span class="faint" style="font-size:11px">${ab?"en vivo con ~15–20 min de atraso":"cerrada"} · último dato ${horaCL(d.ultima)} (Chile)${d.dia?" · sesión del "+fecha(d.dia):""}</span>`:'<span class="faint" style="font-size:12px">Sin precios de Yahoo cada 5 min para esta acción todavía.</span>'}</div>`}).join("");
+        <span class="faint" style="font-size:11px">${ab?"en vivo con ~15–20 min de atraso":"cerrada"} · último dato ${horaCL(d.ultima)} (Chile)${d.dia?" · sesión del "+fecha(d.dia):""}</span>`:'<span class="faint" style="font-size:12px">Sin precios de Yahoo cada 5 min para esta acción todavía.</span>'}</div>`};
+  F.sort((a,b)=>(b.d?1:0)-(a.d?1:0)||(b.valor-a.valor));const cards=F.map(cardY).join("");
   return`<div class="panel" id="panelVivo"><header><h2>📡 Cómo va lo que tenemos</h2><span class="sub">Precios cada 5 min (Yahoo, se actualizan cada 15 min) sobre las posiciones cargadas el ${fecha(s.fecha)}</span></header>
     <div class="kpis">
       <div class="kpi"><div class="l">Valor estimado ahora</div><div class="v">${usd(tot)}</div><div class="s">${con.length} de ${F.length} con precio reciente</div></div>
@@ -1273,8 +1291,8 @@ function carteraVivoHTML(conTV=true){const s0=PORT.snaps[PORT.snaps.length-1];if
       <div class="kpi"><div class="l">Desde la compra (estimado)</div><div class="v ${tot>=costo?"up":"down"}">${sgn(100*(tot/costo-1),2)}</div><div class="s">${tot>=costo?"+":"−"}${usd(Math.abs(tot-costo)).replace("−","")} sobre ${usd(costo)} invertidos</div></div>
     </div>
     <div class="row" style="justify-content:space-between"><span class="sub">Verde = sube vs el cierre anterior (línea punteada) · rojo = baja. Clic en una tarjeta para ver su ficha.</span>${conTV?`<button class="btn small ${tvCart?"on":""}" id="tvCartBtn">${tvCart?"✓ ":""}⚡ Ver en vivo (TradingView)</button>`:'<span class="faint" style="font-size:12px">Gráficos de TradingView en vivo: en ⑦ Mi cartera</span>'}</div>
-    ${tvCart&&conTV?`<div class="grid g3" id="tvCartGrid">${F.map(x=>{const sy=tvSimbolo(x.p.raw);return sy?`<div class="card" style="padding:4px;height:230px" data-tvs="${esc(sy)}"></div>`:`<div class="card"><b class="mono">${esc(x.p.raw)}</b><span class="faint" style="font-size:12px">TradingView no tiene esta bolsa para gráficos insertados.</span></div>`}).join("")}</div>
-      <span class="faint" style="font-size:12px">TradingView: casi en tiempo real en EE.UU.; en Corea y Taiwán puede no estar disponible (en ese caso usen las tarjetas de Yahoo).</span>`:`<div class="grid g3">${cards}</div>`}
+    ${tvCart&&conTV?`<div class="grid g3" id="tvCartGrid">${F.map(x=>{const sy=tvSimbolo(x.p.raw);return sy?`<div class="card" style="padding:4px;height:230px" data-tvs="${esc(sy)}"></div>`:cardY(x)}).join("")}</div>
+      <span class="faint" style="font-size:12px">TradingView casi en tiempo real solo para EE.UU.: TradingView no permite insertar gráficos de Corea, Taiwán ni Japón, así que esas se muestran con los precios de Yahoo (cada 5 min). Para verlas en vivo, Bloomberg: GIP.</span>`:`<div class="grid g3">${cards}</div>`}
     <details class="note"><summary><b>Cómo se calcula</b></summary><div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">
       <span><b>Hoy:</b> cuánto se movió cada acción contra su cierre anterior, multiplicado por lo que tienen invertido. En bolsas cerradas (por ejemplo Corea de noche) muestra su última sesión.</span>
       <span><b>Desde la compra:</b> parte del retorno de TMSG en la última carga y le suma lo que se movió el precio desde entonces. Es estimado: no incluye el cambio de moneda de hoy ni compras/ventas posteriores. Carguen TMSG de nuevo para el número exacto.</span>
